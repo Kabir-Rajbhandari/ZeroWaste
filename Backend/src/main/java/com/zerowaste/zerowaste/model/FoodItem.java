@@ -46,4 +46,8 @@ public class FoodItem {
 
     @Column(nullable = false)
     private Long userId;
+
+    @Builder.Default
+    @Column(columnDefinition = "boolean default false")
+    private Boolean donated = false;
 }

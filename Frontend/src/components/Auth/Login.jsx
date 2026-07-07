@@ -14,8 +14,10 @@ const cardStyle = {
 
 const illustrationFrameStyle = {
   background: colors.authIllustrationBg,
-  borderRadius: '64px 24px 64px 24px',
+  borderRadius: 48,
   boxShadow: '0 8px 28px rgba(61, 140, 49, 0.12)',
+  maxWidth: 440,
+  width: '100%',
 };
 
 export default function Login({ onNavigate }) {
@@ -88,15 +90,15 @@ export default function Login({ onNavigate }) {
             </p>
           </div>
 
-          <div className="d-flex align-items-center justify-content-center flex-grow-1 py-4">
+          <div className="d-flex align-items-center justify-content-center flex-grow-1 py-4 px-3">
             <div
-              className="w-100 d-flex align-items-center justify-content-center p-4 p-xl-5"
-              style={{ ...illustrationFrameStyle, maxWidth: 440 }}
+              className="d-flex align-items-center justify-content-center p-4 p-xl-5 mx-auto"
+              style={illustrationFrameStyle}
             >
               <img
                 src="/images/sign-in-character.png"
                 alt=""
-                className="img-fluid"
+                className="img-fluid d-block mx-auto"
                 style={{ maxWidth: 340 }}
               />
             </div>

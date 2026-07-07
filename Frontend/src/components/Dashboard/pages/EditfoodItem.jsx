@@ -4,7 +4,7 @@ import { colors, fonts, btnPrimaryStyle, btnOutlineStyle } from '../../../theme'
 import { foodApi } from '../../../services/api';
 
 const CATEGORIES = ['Dairy', 'Meat', 'Fruits', 'Vegetable'];
-const UNITS = ['Kg', 'Ltr', 'pcs', 'g', 'ml'];
+const UNITS = ['Kg', 'Ltr'];
 
 const inputStyle = {
   borderColor: colors.border,
@@ -17,7 +17,6 @@ const inputStyle = {
 export default function EditFoodItem({ item, onSuccess, onCancel }) {
   const [form, setForm] = useState({
     name: item.name || '',
-    description: item.description || '',
     category: item.category || '',
     quantity: item.quantity ?? '',
     quantityUnit: item.quantityUnit || 'Kg',
@@ -44,7 +43,6 @@ export default function EditFoodItem({ item, onSuccess, onCancel }) {
     try {
       await foodApi.update(item.id, {
         name: form.name.trim(),
-        description: form.description.trim() || null,
         category: form.category,
         quantity: Number(form.quantity),
         quantityUnit: form.quantityUnit,
@@ -93,16 +91,6 @@ export default function EditFoodItem({ item, onSuccess, onCancel }) {
             <label htmlFor="edit-name" className="form-label fw-semibold small">Food name</label>
             <input id="edit-name" name="name" type="text" className="form-control" style={inputStyle}
               placeholder="e.g. Whole Milk" value={form.name} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label htmlFor="edit-description" className="form-label fw-semibold small">
-              Description <span className="text-muted fw-normal">(optional)</span>
-            </label>
-            <textarea id="edit-description" name="description" className="form-control"
-              style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
-              placeholder="e.g. Organic whole milk from local farm"
-              value={form.description} onChange={handleChange} rows={3} />
           </div>
 
           <div>

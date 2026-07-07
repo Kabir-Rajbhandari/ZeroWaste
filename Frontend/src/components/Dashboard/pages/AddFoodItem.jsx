@@ -1,148 +1,321 @@
-import { useState } from 'react';
+// src/components/Dashboard/pages/AddFoodItem.jsx
+import { useRef, useState } from 'react';
+import { ArrowLeft, ChevronRight, Calendar, ImagePlus, Camera, Link2 } from 'lucide-react';
 import { colors, fonts, btnPrimaryStyle, btnOutlineStyle } from '../../../theme';
 import { foodApi } from '../../../services/api';
 
-const CATEGORIES = ['Dairy', 'Meat', 'Fruits', 'Vegetable'];
-const UNITS = ['Kg', 'Ltr', 'pcs', 'g', 'ml'];
+const CATEGORIES = ['Fruits', 'Vegetable', 'Dairy', 'Meat'];
+const UNITS = ['Kg', 'Ltr'];
+const STORAGE_LOCATIONS = ['Fridge', 'Freezer', 'Pantry', 'Counter'];
 
 const inputStyle = {
   borderColor: colors.border,
   borderWidth: '1.5px',
-  borderRadius: 10,
+  borderRadius: 8,
   fontSize: '0.9rem',
-  padding: '0.7rem 1rem',
+  padding: '0.65rem 0.9rem',
+  background: '#fbf8f2',
+};
+
+const labelStyle = {
+  fontWeight: 700,
+  fontSize: '0.95rem',
+  color: colors.charcoal,
+  marginBottom: '0.4rem',
 };
 
 const INITIAL = {
   name: '',
-  description: '',
   category: '',
   quantity: '',
   quantityUnit: 'Kg',
   expiryDate: '',
+  storage: '',
+  notes: '',
   imageUrl: '',
 };
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AddFoodItem({ onSuccess, onCancel }) {
   const [form, setForm] = useState(INITIAL);
-  const [status, setStatus] = useState('idle');
   const [errMsg, setErrMsg] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [imagePreview, setImagePreview] = useState('');
+  const galleryInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === 'imageUrl') setImagePreview(value);
+  };
+
+  const applyImage = (url) => {
+    setForm((prev) => ({ ...prev, imageUrl: url }));
+    setImagePreview(url);
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrMsg('Please choose a valid image file.');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      applyImage(dataUrl);
+      setErrMsg('');
+    } catch {
+      setErrMsg('Could not read the selected image.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const resetForm = () => {
+    setForm(INITIAL);
+    setImagePreview('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) { setErrMsg('Food name is required.'); setStatus('error'); return; }
-    if (!form.category) { setErrMsg('Please select a category.'); setStatus('error'); return; }
-    if (!form.quantity || Number(form.quantity) <= 0) { setErrMsg('Enter a valid quantity.'); setStatus('error'); return; }
-    if (!form.expiryDate) { setErrMsg('Expiry date is required.'); setStatus('error'); return; }
+    if (!form.name.trim()) return setErrMsg('Food name is required.');
+    if (!form.category) return setErrMsg('Please select a category.');
+    if (!form.quantity.trim() || Number(form.quantity) <= 0) return setErrMsg('Enter a valid quantity.');
+    if (!form.expiryDate) return setErrMsg('Expiry date is required.');
+    if (!form.storage) return setErrMsg('Please select a storage location.');
 
-    setStatus('loading');
     setErrMsg('');
+    setStatus('loading');
+
     try {
       await foodApi.create({
         name: form.name.trim(),
-        description: form.description.trim() || null,
         category: form.category,
         quantity: Number(form.quantity),
         quantityUnit: form.quantityUnit,
         expiryDate: form.expiryDate,
         imageUrl: form.imageUrl.trim() || null,
       });
-      setForm(INITIAL);
-      setStatus('success');
+      resetForm();
       onSuccess?.();
     } catch (err) {
-      setErrMsg(err.message);
-      setStatus('error');
+      setErrMsg(err.message || 'Failed to save item.');
+      setStatus('idle');
     }
   };
 
   return (
     <div>
-      <h1 style={{ fontFamily: fonts.display, fontSize: '1.75rem', fontWeight: 700, color: colors.charcoal, marginBottom: '0.25rem' }}>
-        Add Food Item
+      {onCancel && (
+        <button
+          type="button"
+          className="btn btn-link p-0 d-inline-flex align-items-center gap-1 mb-3 text-decoration-underline"
+          style={{ color: colors.charcoal, fontWeight: 600 }}
+          onClick={onCancel}
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
+      )}
+
+      <h1 style={{ fontFamily: fonts.display, fontSize: '1.85rem', fontWeight: 700, color: colors.charcoal, marginBottom: '0.25rem' }}>
+        Add Food Items
       </h1>
       <p className="mb-4" style={{ color: colors.muted }}>
-        Add a new item to your inventory.
+        Add new food items to keep your inventory up to date.
       </p>
 
-      <div
-        className="bg-white border rounded-4 p-4 p-lg-5"
-        style={{ borderColor: `${colors.border} !important`, maxWidth: 560 }}
-      >
-        {status === 'error' && (
-          <div className="alert alert-danger py-2 small mb-3">{errMsg}</div>
-        )}
-        {status === 'success' && (
-          <div className="alert alert-success py-2 small mb-3">Food item added successfully!</div>
-        )}
+      <div className="rounded-4 p-4 p-lg-5" style={{ background: '#faf6ea', border: `1px solid ${colors.border}` }}>
+        {errMsg && <div className="alert alert-danger py-2 small mb-3">{errMsg}</div>}
 
-        <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
-          <div>
-            <label htmlFor="name" className="form-label fw-semibold small">Food name</label>
-            <input id="name" name="name" type="text" className="form-control" style={inputStyle}
-              placeholder="e.g. Whole Milk" value={form.name} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label htmlFor="description" className="form-label fw-semibold small">
-              Description <span className="text-muted fw-normal">(optional)</span>
-            </label>
-            <textarea id="description" name="description" className="form-control" style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
-              placeholder="e.g. Organic whole milk from local farm, full fat"
-              value={form.description} onChange={handleChange} rows={3} />
-          </div>
-
-          <div>
-            <label htmlFor="category" className="form-label fw-semibold small">Category</label>
-            <select id="category" name="category" className="form-select" style={inputStyle}
-              value={form.category} onChange={handleChange}>
-              <option value="">Select category</option>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div className="row g-3">
-            <div className="col-7">
-              <label htmlFor="quantity" className="form-label fw-semibold small">Quantity</label>
-              <input id="quantity" name="quantity" type="number" min="0.01" step="0.01" className="form-control"
-                style={inputStyle} placeholder="e.g. 2" value={form.quantity} onChange={handleChange} />
+        <form onSubmit={handleSubmit}>
+          <div className="row g-4">
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Food Name</label>
+              <input
+                type="text"
+                name="name"
+                className="form-control"
+                style={inputStyle}
+                placeholder="Apple"
+                value={form.name}
+                onChange={handleChange}
+              />
             </div>
-            <div className="col-5">
-              <label htmlFor="quantityUnit" className="form-label fw-semibold small">Unit</label>
-              <select id="quantityUnit" name="quantityUnit" className="form-select" style={inputStyle}
-                value={form.quantityUnit} onChange={handleChange}>
-                {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Category</label>
+              <div className="position-relative">
+                <select
+                  name="category"
+                  className="form-select"
+                  style={{ ...inputStyle, appearance: 'none' }}
+                  value={form.category}
+                  onChange={handleChange}
+                >
+                  <option value="">Select category</option>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronRight size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: colors.muted }} />
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Quantity</label>
+              <div className="d-flex gap-2">
+                <input
+                  type="number"
+                  name="quantity"
+                  min="0.01"
+                  step="0.01"
+                  className="form-control"
+                  style={inputStyle}
+                  placeholder="2"
+                  value={form.quantity}
+                  onChange={handleChange}
+                />
+                <select
+                  name="quantityUnit"
+                  className="form-select"
+                  style={{ ...inputStyle, maxWidth: 90 }}
+                  value={form.quantityUnit}
+                  onChange={handleChange}
+                >
+                  {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Expiry Date</label>
+              <div className="position-relative">
+                <input
+                  type="date"
+                  name="expiryDate"
+                  className="form-control"
+                  style={{ ...inputStyle, paddingRight: '2.5rem' }}
+                  value={form.expiryDate}
+                  onChange={handleChange}
+                />
+                <Calendar size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: colors.muted }} />
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Storage</label>
+              <div className="position-relative">
+                <select
+                  name="storage"
+                  className="form-select"
+                  style={{ ...inputStyle, appearance: 'none' }}
+                  value={form.storage}
+                  onChange={handleChange}
+                >
+                  <option value="">Storage Location</option>
+                  {STORAGE_LOCATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronRight size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: colors.muted }} />
+              </div>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label className="form-label" style={labelStyle}>Notes (Optional)</label>
+              <textarea
+                name="notes"
+                className="form-control"
+                style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+                placeholder="Food is .."
+                value={form.notes}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="col-12">
+              <label className="form-label" style={labelStyle}>Browse Image</label>
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <Link2 size={16} style={{ color: colors.muted, flexShrink: 0 }} />
+                <input
+                  type="url"
+                  name="imageUrl"
+                  className="form-control"
+                  style={{ ...inputStyle, maxWidth: 560 }}
+                  placeholder="https://example.com/food-image.jpg"
+                  value={form.imageUrl}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                className="d-none"
+                onChange={handleFileSelect}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="d-none"
+                onChange={handleFileSelect}
+              />
+
+              <div className="d-flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  className="btn d-inline-flex align-items-center gap-2"
+                  style={{ ...btnOutlineStyle, background: '#eef0e6' }}
+                  onClick={() => galleryInputRef.current?.click()}
+                >
+                  <ImagePlus size={16} /> Choose from gallery
+                </button>
+                <button
+                  type="button"
+                  className="btn d-inline-flex align-items-center gap-2"
+                  style={{ ...btnOutlineStyle, background: '#eef0e6' }}
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera size={16} /> Take Photo
+                </button>
+              </div>
+
+              {imagePreview && (
+                <div className="mt-3">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="rounded-3 border"
+                    style={{ width: 120, height: 120, objectFit: 'cover', borderColor: colors.border }}
+                    onError={() => setImagePreview('')}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          <div>
-            <label htmlFor="expiryDate" className="form-label fw-semibold small">Expiry date</label>
-            <input id="expiryDate" name="expiryDate" type="date" className="form-control"
-              style={inputStyle} value={form.expiryDate} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label htmlFor="imageUrl" className="form-label fw-semibold small">
-              Image URL <span className="text-muted fw-normal">(optional)</span>
-            </label>
-            <input id="imageUrl" name="imageUrl" type="url" className="form-control"
-              style={inputStyle} placeholder="https://..." value={form.imageUrl} onChange={handleChange} />
-          </div>
-
-          <div className="d-flex gap-2 mt-2">
-            <button type="submit" className="btn btn-primary flex-grow-1"
-              style={{ ...btnPrimaryStyle, padding: '0.75rem' }} disabled={status === 'loading'}>
-              {status === 'loading' ? 'Adding…' : 'Add to inventory'}
+          <div className="d-flex gap-3 justify-content-center mt-5">
+            <button
+              type="submit"
+              className="btn px-4"
+              style={{ ...btnPrimaryStyle, background: colors.authGreen, borderColor: colors.authGreen }}
+              disabled={status === 'loading'}
+            >
+              {status === 'loading' ? 'Saving…' : 'Save Item'}
             </button>
             {onCancel && (
-              <button type="button" className="btn" style={{ ...btnOutlineStyle, padding: '0.75rem 1.25rem' }}
-                onClick={onCancel}>Cancel</button>
+              <button type="button" className="btn px-4" style={btnOutlineStyle} onClick={onCancel}>
+                Cancel
+              </button>
             )}
           </div>
         </form>

@@ -16,8 +16,10 @@ const cardStyle = {
 
 const illustrationFrameStyle = {
   background: colors.authIllustrationBg,
-  borderRadius: '24px 64px 24px 64px',
+  borderRadius: 48,
   boxShadow: '0 8px 28px rgba(61, 140, 49, 0.12)',
+  maxWidth: 440,
+  width: '100%',
 };
 
 export default function Signup({ onNavigate }) {
@@ -84,8 +86,8 @@ export default function Signup({ onNavigate }) {
       <div className="row g-0 w-100 overflow-hidden align-items-stretch" style={cardStyle}>
         {/* Form panel */}
         <div
-          className="col-12 col-lg-6 order-lg-1 d-flex align-items-center justify-content-center px-4 px-xl-5 py-4 py-xl-5 h-100"
-          style={{ background: colors.authBg }}
+          className="col-12 col-lg-6 order-lg-1 d-flex align-items-center justify-content-center px-4 px-xl-5 py-4 py-xl-5 border-end border-2 h-100"
+          style={{ background: colors.authBg, borderColor: colors.authGreen }}
         >
           <div className="w-100" style={{ maxWidth: 380 }}>
             <button
@@ -262,8 +264,8 @@ export default function Signup({ onNavigate }) {
 
         {/* Hero panel */}
         <div
-          className="col-lg-6 order-lg-2 d-none d-lg-flex flex-column justify-content-between px-4 px-xl-5 py-4 py-xl-5 border-start border-2 h-100"
-          style={{ background: colors.authBg, borderColor: colors.authGreen }}
+          className="col-lg-6 order-lg-2 d-none d-lg-flex flex-column justify-content-between px-4 px-xl-5 py-4 py-xl-5 h-100"
+          style={{ background: colors.authBg }}
         >
           <div>
             <p className="mb-3 mb-xl-4 text-dark" style={{ fontSize: '0.75rem' }}>
@@ -287,15 +289,15 @@ export default function Signup({ onNavigate }) {
             </p>
           </div>
 
-          <div className="d-flex align-items-center justify-content-center flex-grow-1 py-4">
+          <div className="d-flex align-items-center justify-content-center flex-grow-1 py-4 px-3">
             <div
-              className="w-100 d-flex align-items-center justify-content-center p-4 p-xl-5"
-              style={{ ...illustrationFrameStyle, maxWidth: 440 }}
+              className="d-flex align-items-center justify-content-center p-4 p-xl-5 mx-auto"
+              style={illustrationFrameStyle}
             >
               <img
                 src="/images/signup-characters.png"
                 alt=""
-                className="img-fluid"
+                className="img-fluid d-block mx-auto"
                 style={{ maxWidth: 380 }}
               />
             </div>

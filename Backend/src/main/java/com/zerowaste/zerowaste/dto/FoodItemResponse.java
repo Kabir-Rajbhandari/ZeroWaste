@@ -16,6 +16,7 @@ public class FoodItemResponse {
     private String quantityUnit;
     private LocalDate expiryDate;
     private String imageUrl;
+    private Boolean donated;
 
     public static FoodItemResponse from(FoodItem item) {
         return new FoodItemResponse(
@@ -25,7 +26,8 @@ public class FoodItemResponse {
                 item.getQuantity(),
                 item.getQuantityUnit(),
                 item.getExpiryDate(),
-                item.getImageUrl()
+                item.getImageUrl(),
+                item.getDonated()
         );
     }
 }

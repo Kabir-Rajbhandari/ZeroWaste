@@ -25,6 +25,13 @@ public class FoodItemService {
 
     public List<FoodItemResponse> getAllForUser(Long userId) {
         return foodItemRepository.findByUserIdOrderByExpiryDateAsc(userId).stream()
+                .filter(item -> !Boolean.TRUE.equals(item.getDonated()))
+                .map(FoodItemResponse::from)
+                .toList();
+    }
+
+    public List<FoodItemResponse> getAvailableForBrowse(Long userId) {
+        return foodItemRepository.findByDonatedTrueAndUserIdNotOrderByExpiryDateAsc(userId).stream()
                 .map(FoodItemResponse::from)
                 .toList();
     }
@@ -43,6 +50,31 @@ public class FoodItemService {
                 .userId(userId)
                 .build();
 
+        return FoodItemResponse.from(foodItemRepository.save(item));
+    }
+
+    public FoodItemResponse update(Long id, FoodItemRequest request, Long userId) {
+        validateCategory(request.getCategory());
+        validateUnit(request.getQuantityUnit());
+
+        FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
+
+        item.setName(request.getName().trim());
+        item.setCategory(request.getCategory());
+        item.setQuantity(request.getQuantity());
+        item.setQuantityUnit(request.getQuantityUnit());
+        item.setExpiryDate(request.getExpiryDate());
+        item.setImageUrl(blankToNull(request.getImageUrl()));
+
+        return FoodItemResponse.from(foodItemRepository.save(item));
+    }
+
+    public FoodItemResponse donate(Long id, Long userId) {
+        FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
+
+        item.setDonated(true);
         return FoodItemResponse.from(foodItemRepository.save(item));
     }
 
