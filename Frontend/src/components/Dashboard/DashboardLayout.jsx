@@ -40,7 +40,7 @@ export default function DashboardLayout({ activePage, onPageChange, onNavigate, 
               >
                 <User size={18} />
               </span>
-              <span className="fw-semibold text-white">
+              <span className="fw-semibold" style={{ color: 'rgba(0, 0, 0, 0.4)' }}>
                 {user?.fullName || 'Username'}
               </span>
             </div>
