@@ -57,8 +57,15 @@ export const foodApi = {
     return request('/api/food-items/browse', { method: 'GET' });
   },
 
-  donate(id) {
-    return request(`/api/food-items/${id}/donate`, { method: 'POST' });
+  donate(id, details) {
+    return request(`/api/food-items/${id}/donate`, {
+      method: 'POST',
+      body: details ? JSON.stringify(details) : undefined,
+    });
+  },
+
+  claim(id) {
+    return request(`/api/food-items/${id}/claim`, { method: 'POST' });
   },
 
   delete(id) {

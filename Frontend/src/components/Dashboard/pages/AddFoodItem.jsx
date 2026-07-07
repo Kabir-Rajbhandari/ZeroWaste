@@ -35,12 +35,62 @@ const INITIAL = {
   imageUrl: '',
 };
 
-function readFileAsDataUrl(file) {
+// Photos straight off a phone/camera can be several MB, which is far bigger than most
+// backends allow for a single field/request body (this is what was causing "something
+// went wrong" when picking a photo from the device). Downscale + re-compress it in the
+// browser first so we send a small, predictable payload either way.
+const MAX_DIMENSION = 900;
+const JPEG_QUALITY = 0.75;
+const MAX_SOURCE_FILE_BYTES = 15 * 1024 * 1024; // 15MB raw upload cap, before compression
+
+function compressImageFile(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    if (file.size > MAX_SOURCE_FILE_BYTES) {
+      reject(new Error('That image is too large. Please choose a photo under 15MB.'));
+      return;
+    }
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      let { width, height } = img;
+      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+        const scale = MAX_DIMENSION / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Could not process the selected image.'));
+            return;
+          }
+          const compressedReader = new FileReader();
+          compressedReader.onload = () => resolve(compressedReader.result);
+          compressedReader.onerror = reject;
+          compressedReader.readAsDataURL(blob);
+        },
+        'image/jpeg',
+        JPEG_QUALITY
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Could not read the selected image.'));
+    };
+
+    img.src = objectUrl;
   });
 }
 
@@ -49,18 +99,20 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
   const [errMsg, setErrMsg] = useState('');
   const [status, setStatus] = useState('idle');
   const [imagePreview, setImagePreview] = useState('');
+  // Holds the compressed base64 image when a file/photo is picked from the device.
+  // Kept separate from form.imageUrl so the visible "paste a link" field never gets
+  // filled with a giant base64 string.
+  const [uploadedImageData, setUploadedImageData] = useState('');
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    if (name === 'imageUrl') setImagePreview(value);
-  };
-
-  const applyImage = (url) => {
-    setForm((prev) => ({ ...prev, imageUrl: url }));
-    setImagePreview(url);
+    if (name === 'imageUrl') {
+      setUploadedImageData('');
+      setImagePreview(value);
+    }
   };
 
   const handleFileSelect = async (e) => {
@@ -71,11 +123,13 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      applyImage(dataUrl);
+      const dataUrl = await compressImageFile(file);
+      setUploadedImageData(dataUrl);
+      setForm((prev) => ({ ...prev, imageUrl: '' }));
+      setImagePreview(dataUrl);
       setErrMsg('');
-    } catch {
-      setErrMsg('Could not read the selected image.');
+    } catch (err) {
+      setErrMsg(err.message || 'Could not read the selected image.');
     } finally {
       e.target.value = '';
     }
@@ -84,6 +138,7 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
   const resetForm = () => {
     setForm(INITIAL);
     setImagePreview('');
+    setUploadedImageData('');
   };
 
   const handleSubmit = async (e) => {
@@ -104,7 +159,7 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
         quantity: Number(form.quantity),
         quantityUnit: form.quantityUnit,
         expiryDate: form.expiryDate,
-        imageUrl: form.imageUrl.trim() || null,
+        imageUrl: uploadedImageData || form.imageUrl.trim() || null,
       });
       resetForm();
       onSuccess?.();

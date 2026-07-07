@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Search, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, fonts, btnPrimaryStyle } from '../../../theme';
 import { foodApi } from '../../../services/api';
+import DonateModal from '../DonateModal';
 
 const CATEGORIES = ['All Categories', 'Fruits', 'Vegetable', 'Dairy', 'Meat'];
 
@@ -19,6 +20,7 @@ export default function FoodInventory({ onNavigate }) {
   const [category, setCategory] = useState('All Categories');
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState('');
+  const [donateTarget, setDonateTarget] = useState(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -58,14 +60,11 @@ export default function FoodInventory({ onNavigate }) {
     }
   };
 
-  const handleDonate = async (id) => {
-    try {
-      await foodApi.donate(id);
-      setItems((prev) => prev.filter((item) => item.id !== id));
-      onNavigate?.('browse');
-    } catch (err) {
-      setErrMsg(err.message || 'Failed to donate item.');
-    }
+  const handleDonateConfirm = async (details) => {
+    await foodApi.donate(donateTarget.id, details);
+    setItems((prev) => prev.filter((item) => item.id !== donateTarget.id));
+    setDonateTarget(null);
+    onNavigate?.('browse');
   };
 
   const filtered = items.filter((item) => {
@@ -179,7 +178,7 @@ export default function FoodInventory({ onNavigate }) {
                         type="button"
                         className="btn btn-sm flex-grow-1 text-white"
                         style={{ background: colors.authGreen, borderRadius: 6, fontWeight: 500 }}
-                        onClick={() => handleDonate(item.id)}
+                        onClick={() => setDonateTarget(item)}
                       >
                         Donate
                       </button>
@@ -191,6 +190,12 @@ export default function FoodInventory({ onNavigate }) {
           </div>
         )}
       </div>
+
+      <DonateModal
+        item={donateTarget}
+        onCancel={() => setDonateTarget(null)}
+        onConfirm={handleDonateConfirm}
+      />
     </div>
   );
 }

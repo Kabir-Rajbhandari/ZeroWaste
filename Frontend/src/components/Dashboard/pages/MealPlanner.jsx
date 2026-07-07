@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { colors, fonts } from '../../../theme';
+import SuggestedMeals from '../SuggestedMeals';
 
 const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner'];
 const STORAGE_KEY = 'zw_meal_planner';
@@ -115,6 +116,8 @@ export default function MealPlanner() {
           Create smarter meal plans based on your food inventory.
         </p>
       </div>
+
+      <SuggestedMeals />
 
       {/* Controls row */}
       <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">

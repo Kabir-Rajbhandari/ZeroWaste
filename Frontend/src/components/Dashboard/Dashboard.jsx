@@ -6,6 +6,7 @@ import BrowseFoodItem from './pages/BrowseFoodItem';
 import AddFoodItem from './pages/AddFoodItem';
 import EditFoodItem from './pages/EditFoodItem';
 import MealPlanner from './pages/MealPlanner';
+import ExpiryAlerts from './pages/ExpiryAlerts';
 
 export default function Dashboard({ onNavigate }) {
   const [activePage, setActivePage] = useState('inventory');
@@ -35,7 +36,9 @@ export default function Dashboard({ onNavigate }) {
       case 'inventory':
         return <FoodInventory onNavigate={handleNavigate} />;
       case 'browse':
-        return <BrowseFoodItem />;
+        return <BrowseFoodItem onNavigate={handleNavigate} />;
+      case 'expiry':
+        return <ExpiryAlerts onNavigate={handleNavigate} />;
       case 'add-food':
         return <AddFoodItem onSuccess={handleFoodAdded} onCancel={() => setActivePage('inventory')} />;
       case 'edit-food':

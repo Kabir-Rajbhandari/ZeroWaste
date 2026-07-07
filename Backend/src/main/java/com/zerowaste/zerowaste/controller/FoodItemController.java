@@ -1,5 +1,6 @@
 package com.zerowaste.zerowaste.controller;
 
+import com.zerowaste.zerowaste.dto.DonateRequest;
 import com.zerowaste.zerowaste.dto.FoodItemRequest;
 import com.zerowaste.zerowaste.dto.FoodItemResponse;
 import com.zerowaste.zerowaste.service.FoodItemService;
@@ -55,8 +56,16 @@ public class FoodItemController {
     }
 
     @PostMapping("/{id}/donate")
-    public FoodItemResponse donate(@PathVariable Long id, @AuthenticationPrincipal Long userId) {
-        return foodItemService.donate(id, userId);
+    public FoodItemResponse donate(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) DonateRequest request,
+            @AuthenticationPrincipal Long userId) {
+        return foodItemService.donate(id, userId, request);
+    }
+
+    @PostMapping("/{id}/claim")
+    public FoodItemResponse claim(@PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        return foodItemService.claim(id, userId);
     }
 
     @DeleteMapping("/{id}")

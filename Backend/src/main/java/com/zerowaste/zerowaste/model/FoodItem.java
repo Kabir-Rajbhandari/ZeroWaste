@@ -50,4 +50,15 @@ public class FoodItem {
     @Builder.Default
     @Column(columnDefinition = "boolean default false")
     private Boolean donated = false;
+
+    // Filled in by the donor when they click "Donate" on a food item (DonateModal).
+    // Shown to the claimer on the Browse Food Item detail page.
+    @Column(name = "pickup_location")
+    private String pickupLocation;
+
+    @Column(name = "available_time")
+    private String availableTime;
+
+    @Column(name = "contact_detail")
+    private String contactDetail;
 }

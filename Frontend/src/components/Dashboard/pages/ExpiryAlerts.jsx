@@ -1,9 +1,10 @@
-    import { useEffect, useState, useMemo } from 'react';
-import { Bell, Trash2, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Bell, RefreshCw, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { colors, fonts } from '../../../theme';
 import { foodApi } from '../../../services/api';
+import DonateModal from '../DonateModal';
 
-const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=64&h=64&fit=crop';
+const PAGE_SIZE = 8;
 
 function getDaysLeft(dateStr) {
   if (!dateStr) return null;
@@ -30,35 +31,37 @@ function getStatus(daysLeft) {
   return 'Fresh';
 }
 
-export default function ExpiryAlerts({ onNavigate }) {
+export default function ExpiryAlerts() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
-  const [deletingId, setDeletingId] = useState(null);
+  const [donatingId, setDonatingId] = useState(null);
+  const [page, setPage] = useState(1);
 
   const loadItems = () => {
     setLoading(true);
     setError('');
     foodApi
       .getAll()
-      .then(setItems)
-      .catch((err) => setError(err.message))
+      .then((data) => setItems(Array.isArray(data) ? data : []))
+      .catch((err) => setError(err.message || 'Failed to load food items.'))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadItems(); }, []);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Remove this item from inventory?')) return;
-    setDeletingId(id);
+  const [donateTarget, setDonateTarget] = useState(null);
+
+  const handleDonateConfirm = async (details) => {
+    setDonatingId(donateTarget.id);
     try {
-      await foodApi.delete(id);
-      setItems((prev) => prev.filter((i) => i.id !== id));
-    } catch (err) {
-      setError(err.message);
+      await foodApi.donate(donateTarget.id, details);
+      setDonateTarget(null);
+      // Move the item into the "donated" pool on the backend; refresh this list.
+      loadItems();
     } finally {
-      setDeletingId(null);
+      setDonatingId(null);
     }
   };
 
@@ -75,15 +78,18 @@ export default function ExpiryAlerts({ onNavigate }) {
     return alertItems.filter((item) => getStatus(item.daysLeft) === activeFilter);
   }, [alertItems, activeFilter]);
 
-  const expiringSoonCount = alertItems.filter((i) => getStatus(i.daysLeft) === 'Expiring Soon').length;
-  const expiredCount = alertItems.filter((i) => getStatus(i.daysLeft) === 'Expired').length;
+  useEffect(() => { setPage(1); }, [activeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div>
       {/* Header */}
-      <div className="d-flex align-items-start justify-content-between mb-4 gap-3 flex-wrap">
+      <div className="d-flex align-items-start justify-content-between mb-2 gap-3 flex-wrap">
         <div>
-          <h1 style={{ fontFamily: fonts.display, fontSize: '1.75rem', fontWeight: 700, color: colors.charcoal, marginBottom: '0.25rem' }}>
+          <h1 style={{ fontFamily: fonts.display, fontSize: '1.85rem', fontWeight: 700, color: colors.charcoal, marginBottom: '0.25rem' }}>
             Expiry Alerts
           </h1>
           <p className="mb-0" style={{ color: colors.muted }}>
@@ -101,30 +107,8 @@ export default function ExpiryAlerts({ onNavigate }) {
         </button>
       </div>
 
-      {/* Summary badges */}
-      {!loading && alertItems.length > 0 && (
-        <div className="d-flex gap-3 mb-4 flex-wrap">
-          <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
-            style={{ background: '#fff7ed', border: '1.5px solid #fed7aa' }}>
-            <Bell size={14} color="#c2410c" />
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#c2410c' }}>
-              {expiringSoonCount} expiring soon
-            </span>
-          </div>
-          {expiredCount > 0 && (
-            <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-3"
-              style={{ background: '#fef2f2', border: '1.5px solid #fecaca' }}>
-              <Bell size={14} color="#b91c1c" />
-              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#b91c1c' }}>
-                {expiredCount} expired
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Filter tabs */}
-      <div className="d-flex gap-2 mb-4">
+      <div className="d-flex gap-2 mb-4 mt-4">
         {FILTERS.map((f) => {
           const isActive = activeFilter === f;
           return (
@@ -132,14 +116,14 @@ export default function ExpiryAlerts({ onNavigate }) {
               key={f}
               type="button"
               onClick={() => setActiveFilter(f)}
+              className="fw-semibold"
               style={{
-                padding: '0.4rem 1.1rem',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                border: `1.5px solid ${isActive ? colors.charcoal : colors.border}`,
-                borderRadius: 8,
-                background: isActive ? colors.charcoal : 'white',
-                color: isActive ? 'white' : colors.muted,
+                padding: '0.5rem 1.4rem',
+                fontSize: '0.9rem',
+                border: 'none',
+                borderRadius: 10,
+                background: isActive ? colors.authGreen : '#eef2e3',
+                color: isActive ? 'white' : colors.charcoal,
                 cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
@@ -153,7 +137,7 @@ export default function ExpiryAlerts({ onNavigate }) {
       {error && <div className="alert alert-danger py-2 small mb-4">{error}</div>}
 
       {/* Table card */}
-      <div className="bg-white rounded-4 overflow-hidden" style={{ border: `1.5px solid ${colors.border}` }}>
+      <div className="rounded-4 overflow-hidden" style={{ border: `1px solid ${colors.border}`, background: '#fbfaf4' }}>
         {loading ? (
           <div className="text-center py-5" style={{ color: colors.muted }}>Loading alerts…</div>
         ) : filteredItems.length === 0 ? (
@@ -168,102 +152,56 @@ export default function ExpiryAlerts({ onNavigate }) {
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0">
+            <table className="table align-middle mb-0">
               <thead>
-                <tr style={{ background: colors.cream, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: colors.muted }}>
-                  <th className="ps-4 py-3 border-0">Food Items</th>
-                  <th className="py-3 border-0">Expiry Date</th>
-                  <th className="py-3 border-0">Days Left</th>
-                  <th className="py-3 border-0">Status</th>
-                  <th className="pe-4 py-3 border-0 text-end">Action</th>
+                <tr style={{ background: '#f6f0c8', fontSize: '0.9rem', color: colors.charcoal }}>
+                  <th className="ps-4 py-3 border-0 fw-bold">Food Items</th>
+                  <th className="py-3 border-0 fw-bold">Category</th>
+                  <th className="py-3 border-0 fw-bold">Days Left</th>
+                  <th className="py-3 border-0 fw-bold">Expiry Date</th>
+                  <th className="py-3 border-0 fw-bold">Status</th>
+                  <th className="pe-4 py-3 border-0 fw-bold text-end">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.map((item) => {
+                {paginatedItems.map((item, idx) => {
                   const status = getStatus(item.daysLeft);
                   const isExpired = status === 'Expired';
 
-                  const statusStyle = isExpired
-                    ? { background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca' }
-                    : { background: '#fff7ed', color: '#c2410c', border: '1.5px solid #fed7aa' };
-
-                  const daysLabel = item.daysLeft < 0
-                    ? `${item.daysLeft} days`
-                    : item.daysLeft === 0
-                    ? 'Today'
-                    : `${item.daysLeft} day${item.daysLeft !== 1 ? 's' : ''}`;
+                  const daysLabel = isExpired ? '-' : item.daysLeft === 0 ? 'Today' : `${item.daysLeft} day${item.daysLeft !== 1 ? 's' : ''}`;
 
                   return (
-                    <tr key={item.id}>
-                      {/* Food item */}
+                    <tr key={item.id} style={{ borderTop: idx === 0 ? 'none' : `1px solid ${colors.border}` }}>
                       <td className="ps-4 py-3">
-                        <div className="d-flex align-items-center gap-3">
-                          <img
-                            src={item.imageUrl || DEFAULT_IMAGE}
-                            alt={item.name}
-                            className="rounded-3 object-fit-cover flex-shrink-0"
-                            style={{ width: 44, height: 44 }}
-                          />
-                          <div>
-                            <div className="fw-semibold" style={{ color: colors.charcoal }}>{item.name}</div>
-                            {item.description && (
-                              <div style={{ fontSize: '0.75rem', color: colors.muted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {item.description}
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        <span className="fw-semibold" style={{ color: colors.charcoal }}>{item.name}</span>
                       </td>
-
-                      {/* Expiry date */}
-                      <td className="py-3" style={{ color: colors.charcoal, fontSize: '0.9rem' }}>
-                        {formatDate(item.expiryDate)}
-                      </td>
-
-                      {/* Days left */}
-                      <td className="py-3">
-                        <span style={{
-                          fontSize: '0.875rem',
-                          fontWeight: 600,
-                          color: isExpired ? '#b91c1c' : item.daysLeft <= 3 ? '#c2410c' : colors.charcoal,
-                        }}>
-                          {daysLabel}
-                        </span>
-                      </td>
-
-                      {/* Status badge */}
+                      <td className="py-3" style={{ color: colors.charcoal }}>{item.category}</td>
+                      <td className="py-3" style={{ color: colors.charcoal }}>{daysLabel}</td>
+                      <td className="py-3" style={{ color: colors.charcoal }}>{formatDate(item.expiryDate)}</td>
                       <td className="py-3">
                         <span
-                          className="px-3 py-1 rounded-pill"
-                          style={{ ...statusStyle, fontSize: '0.78rem', fontWeight: 600, display: 'inline-block' }}
+                          className="px-3 py-1 rounded-2"
+                          style={{
+                            background: isExpired ? '#f3d9ce' : '#dcead0',
+                            color: colors.charcoal,
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            display: 'inline-block',
+                          }}
                         >
                           {status}
                         </span>
                       </td>
-
-                      {/* Action */}
                       <td className="pe-4 py-3 text-end">
-                        <div className="d-inline-flex gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-sm d-inline-flex align-items-center justify-content-center"
-                            title="Edit item"
-                            onClick={() => onNavigate?.('edit-food', item)}
-                            style={{ width: 34, height: 34, borderRadius: 8, border: `1.5px solid ${colors.border}`, background: 'white', color: colors.charcoal }}
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center"
-                            title="Delete item"
-                            style={{ width: 34, height: 34, borderRadius: 8 }}
-                            onClick={() => handleDelete(item.id)}
-                            disabled={deletingId === item.id}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={donatingId === item.id}
+                          onClick={() => setDonateTarget(item)}
+                          style={{ background: '#c9dcb8', border: 'none', borderRadius: 8, color: colors.charcoal, fontWeight: 500, padding: '0.4rem 1.1rem' }}
+                        >
+                          {donatingId === item.id ? 'Donating…' : 'Donate'}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -273,6 +211,38 @@ export default function ExpiryAlerts({ onNavigate }) {
           </div>
         )}
       </div>
+
+      {!loading && filteredItems.length > 0 && totalPages > 1 && (
+        <div className="d-flex align-items-center justify-content-end gap-3 mt-4">
+          <button
+            type="button"
+            className="btn btn-sm p-1"
+            style={{ color: currentPage === 1 ? colors.border : colors.charcoal, background: 'none', border: 'none' }}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            aria-label="Previous page"
+          >
+            <ChevronsLeft size={20} />
+          </button>
+          <span className="fw-semibold" style={{ color: colors.charcoal }}>{currentPage}</span>
+          <button
+            type="button"
+            className="btn btn-sm p-1"
+            style={{ color: currentPage === totalPages ? colors.border : colors.charcoal, background: 'none', border: 'none' }}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            aria-label="Next page"
+          >
+            <ChevronsRight size={20} />
+          </button>
+        </div>
+      )}
+
+      <DonateModal
+        item={donateTarget}
+        onCancel={() => setDonateTarget(null)}
+        onConfirm={handleDonateConfirm}
+      />
     </div>
   );
 }
