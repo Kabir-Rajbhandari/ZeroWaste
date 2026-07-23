@@ -568,7 +568,7 @@ export default function Settings({ onProfileUpdated }) {
     });
     setTwoFactorMsg({
       type: "success",
-      text: "Two-factor authentication is now enabled on your account! 🎉",
+      text: "Two-factor authentication is now enabled on your account.",
     });
   };
 
@@ -939,34 +939,6 @@ export default function Settings({ onProfileUpdated }) {
                     {twoFactorMsg.text}
                   </span>
                 )}
-              </div>
-            )}
-
-            {/* 2FA status badge */}
-            {!loadingProfile && (
-              <div
-                className="d-flex align-items-center gap-2 mb-3 px-3 py-2 rounded-3"
-                style={{
-                  background: twoFactor
-                    ? "rgba(62,160,102,0.12)"
-                    : "rgba(220,53,69,0.07)",
-                  border: `1.5px solid ${twoFactor ? "rgba(62,160,102,0.4)" : "rgba(220,53,69,0.25)"}`,
-                }}
-              >
-                {twoFactor ? (
-                  <ShieldCheck size={18} color={colors.green} />
-                ) : (
-                  <ShieldOff size={18} color="#dc3545" />
-                )}
-                <span
-                  style={{
-                    fontSize: "0.83rem",
-                    fontWeight: 600,
-                    color: twoFactor ? colors.green : "#dc3545",
-                  }}
-                >
-                  {twoFactor ? "2FA is Active" : "2FA is Inactive"}
-                </span>
               </div>
             )}
 

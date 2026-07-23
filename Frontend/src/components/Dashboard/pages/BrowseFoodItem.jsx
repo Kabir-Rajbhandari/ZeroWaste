@@ -9,7 +9,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
-import { foodApi } from "../../../services/api";
+import { foodApi, resolveAssetUrl } from "../../../services/api";
 
 const CATEGORIES = [
   "All Categories",
@@ -100,6 +100,7 @@ export default function BrowseFoodItem({ onNavigate }) {
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [donorAvatarError, setDonorAvatarError] = useState(false);
 
   const loadItems = async () => {
     setLoading(true);
@@ -144,6 +145,7 @@ export default function BrowseFoodItem({ onNavigate }) {
     setSelectedItem(item);
     setShowContact(false);
     setClaimMsg("");
+    setDonorAvatarError(false);
   };
 
   const handleClaim = async () => {
@@ -231,8 +233,8 @@ export default function BrowseFoodItem({ onNavigate }) {
               <img
                 src={getImage(selectedItem)}
                 alt={selectedItem.name}
-                className="rounded-4 w-100"
-                style={{ height: 260, objectFit: "contain" }}
+                className="rounded-4"
+                style={{ height: 390, objectFit: "cover" }}
                 onError={(e) => {
                   e.currentTarget.src = FALLBACK_IMAGE;
                 }}
@@ -253,17 +255,32 @@ export default function BrowseFoodItem({ onNavigate }) {
               </h2>
 
               <div className="d-flex align-items-center gap-2 mt-3 mb-3">
-                <span
-                  className="d-inline-flex align-items-center justify-content-center rounded-circle"
-                  style={{
-                    width: 42,
-                    height: 42,
-                    background: colors.greenLrgb,
-                    color: colors.white,
-                  }}
-                >
-                  <User size={26} />
-                </span>
+                {selectedItem.donorProfileImageUrl && !donorAvatarError ? (
+                  <img
+                    src={resolveAssetUrl(selectedItem.donorProfileImageUrl)}
+                    alt={getDonorName(selectedItem)}
+                    className="rounded-circle"
+                    style={{
+                      width: 42,
+                      height: 42,
+                      objectFit: "cover",
+                      border: `2px solid ${colors.green}`,
+                    }}
+                    onError={() => setDonorAvatarError(true)}
+                  />
+                ) : (
+                  <span
+                    className="d-inline-flex align-items-center justify-content-center rounded-circle"
+                    style={{
+                      width: 42,
+                      height: 42,
+                      background: colors.greenLrgb,
+                      color: colors.white,
+                    }}
+                  >
+                    <User size={26} />
+                  </span>
+                )}
                 <div>
                   <div className="small" style={{ color: colors.muted }}>
                     Donor

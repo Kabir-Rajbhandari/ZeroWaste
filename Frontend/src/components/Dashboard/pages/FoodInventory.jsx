@@ -6,6 +6,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  ChevronRight,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi } from "../../../services/api";
@@ -244,7 +245,7 @@ export default function FoodInventory({ onNavigate }) {
             ))}
           </select>
 
-          <ChevronsRight
+          <ChevronRight
             className="category"
             size={20}
             style={{
