@@ -234,7 +234,7 @@ export default function BrowseFoodItem({ onNavigate }) {
                 src={getImage(selectedItem)}
                 alt={selectedItem.name}
                 className="rounded-4"
-                style={{ height: 390, objectFit: "cover" }}
+                style={{ height: 350, width: 340, objectFit: "cover" }}
                 onError={(e) => {
                   e.currentTarget.src = FALLBACK_IMAGE;
                 }}
