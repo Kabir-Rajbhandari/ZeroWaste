@@ -98,9 +98,10 @@ public class FoodItemService {
                     boolean isOwn = item.getUserId().equals(userId);
                     User donor = donorsById.get(item.getUserId());
                     String donorName = donor != null ? donor.getFullName() : "Anonymous";
+                    String donorProfileImageUrl = donor != null ? donor.getProfileImageUrl() : null;
                     Boolean donorPublic = donor != null ? donor.getDonationPublic() : null;
                     boolean alreadyRequested = requestedByMe.contains(item.getId());
-                    return FoodItemResponse.from(item, donorName, isOwn, donorPublic, alreadyRequested);
+                    return FoodItemResponse.from(item, donorName, isOwn, donorPublic, alreadyRequested, donorProfileImageUrl);
                 })
                 .toList();
     }

@@ -1,14 +1,16 @@
 package com.zerowaste.zerowaste.dto;
 
+import java.time.LocalDate;
+
 import com.zerowaste.zerowaste.model.FoodItem;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-
-import java.time.LocalDate;
 
 @Getter
 @AllArgsConstructor
 public class FoodItemResponse {
+
     private Long id;
     private String name;
     private String category;
@@ -18,6 +20,7 @@ public class FoodItemResponse {
     private String imageUrl;
     private Boolean donated;
     private String donorName;
+    private String donorProfileImageUrl;
     private String pickupLocation;
     private String availableTime;
     private String contactDetail;
@@ -30,14 +33,18 @@ public class FoodItemResponse {
     private Boolean alreadyRequestedByMe;
 
     public static FoodItemResponse from(FoodItem item) {
-        return from(item, null, false, null, false);
+        return from(item, null, false, null, false, null);
     }
 
     public static FoodItemResponse from(FoodItem item, String donorName) {
-        return from(item, donorName, false, null, false);
+        return from(item, donorName, false, null, false, null);
     }
 
     public static FoodItemResponse from(FoodItem item, String donorName, boolean isOwn, Boolean donorPublic, boolean alreadyRequestedByMe) {
+        return from(item, donorName, isOwn, donorPublic, alreadyRequestedByMe, null);
+    }
+
+    public static FoodItemResponse from(FoodItem item, String donorName, boolean isOwn, Boolean donorPublic, boolean alreadyRequestedByMe, String donorProfileImageUrl) {
         return new FoodItemResponse(
                 item.getId(),
                 item.getName(),
@@ -48,6 +55,7 @@ public class FoodItemResponse {
                 item.getImageUrl(),
                 item.getDonated(),
                 donorName,
+                donorProfileImageUrl,
                 item.getPickupLocation(),
                 item.getAvailableTime(),
                 item.getContactDetail(),

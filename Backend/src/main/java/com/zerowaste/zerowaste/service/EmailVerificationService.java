@@ -1,21 +1,22 @@
 package com.zerowaste.zerowaste.service;
 
-import com.zerowaste.zerowaste.exception.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import com.zerowaste.zerowaste.exception.ApiException;
+
 import jakarta.mail.internet.MimeMessage;
 
 /**
- * Sends the one-time email-verification link a user must click after
- * signing up before they can log in for the first time.
+ * Sends the one-time email-verification link a user must click after signing up
+ * before they can log in for the first time.
  *
- * Kept separate from TwoFactorService intentionally — this is a distinct
- * flow (link-based, one-time-ever) from the 2FA OTP flow (code-based,
- * repeats on every login), and the two should not share state or code.
+ * Kept separate from TwoFactorService intentionally — this is a distinct flow
+ * (link-based, one-time-ever) from the 2FA OTP flow (code-based, repeats on
+ * every login), and the two should not share state or code.
  */
 @Service
 public class EmailVerificationService {
@@ -75,7 +76,7 @@ public class EmailVerificationService {
                         <tr>
                           <td style="background:#3d6b35;padding:28px 40px;text-align:center;">
                             <h1 style="margin:0;color:#ffffff;font-size:1.6rem;letter-spacing:1px;">
-                              🌿 ZeroWaste
+                            ZeroWaste
                             </h1>
                           </td>
                         </tr>
@@ -116,8 +117,8 @@ public class EmailVerificationService {
                           <td style="background:#f4f7f4;padding:20px 40px;text-align:center;
                                      border-top:1px solid #e0ebe0;">
                             <p style="margin:0;color:#7a8a7a;font-size:0.78rem;">
-                              © 2025 ZeroWaste · Smart Food Waste Management<br>
-                              This is an automated message — please do not reply.
+                              &copy; 2026 ZeroWaste - Smart Food Waste Management<br>
+                              This is an automated message - please do not reply.
                             </p>
                           </td>
                         </tr>

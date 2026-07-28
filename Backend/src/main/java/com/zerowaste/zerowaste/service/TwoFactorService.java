@@ -1,28 +1,31 @@
 package com.zerowaste.zerowaste.service;
 
-import com.zerowaste.zerowaste.dto.UserResponse;
-import com.zerowaste.zerowaste.exception.ApiException;
-import com.zerowaste.zerowaste.model.Notification;
-import com.zerowaste.zerowaste.model.User;
-import com.zerowaste.zerowaste.repository.NotificationRepository;
-import com.zerowaste.zerowaste.repository.UserRepository;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import com.zerowaste.zerowaste.dto.UserResponse;
+import com.zerowaste.zerowaste.exception.ApiException;
+import com.zerowaste.zerowaste.model.Notification;
+import com.zerowaste.zerowaste.model.User;
+import com.zerowaste.zerowaste.repository.NotificationRepository;
+import com.zerowaste.zerowaste.repository.UserRepository;
+
 import jakarta.mail.internet.MimeMessage;
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 /**
  * Handles the 2FA enable/disable flow:
  *
- *  1. User toggles 2FA ON  →  initiate2FA()   → generates OTP, emails it, marks pendingTwoFactor=true
- *  2. User enters the OTP  →  verify2FA()     → validates OTP, sets twoFactorEnabled=true, clears OTP
- *  3. User toggles 2FA OFF →  disable2FA()   → immediately sets twoFactorEnabled=false (no OTP needed)
+ * 1. User toggles 2FA ON → initiate2FA() → generates OTP, emails it, marks
+ * pendingTwoFactor=true 2. User enters the OTP → verify2FA() → validates OTP,
+ * sets twoFactorEnabled=true, clears OTP 3. User toggles 2FA OFF → disable2FA()
+ * → immediately sets twoFactorEnabled=false (no OTP needed)
  */
 @Service
 public class TwoFactorService {
@@ -40,18 +43,18 @@ public class TwoFactorService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public TwoFactorService(UserRepository userRepository,
-                            NotificationRepository notificationRepository,
-                            JavaMailSender mailSender) {
+            NotificationRepository notificationRepository,
+            JavaMailSender mailSender) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.mailSender = mailSender;
     }
 
     // ── Step 1: User toggles 2FA on → send OTP email ───────────────────────
-
     /**
      * Generates a 6-digit OTP, persists it on the user, and sends the
-     * verification email. Returns immediately; the account is NOT yet 2FA-enabled.
+     * verification email. Returns immediately; the account is NOT yet
+     * 2FA-enabled.
      */
     public void initiate2FA(Long userId) {
         User user = findUser(userId);
@@ -71,7 +74,6 @@ public class TwoFactorService {
     }
 
     // ── Step 2: User submits the code → activate 2FA ───────────────────────
-
     /**
      * Validates the supplied OTP. On success, enables 2FA and clears the OTP
      * fields. On failure, throws ApiException (caller should NOT clear the OTP
@@ -116,10 +118,9 @@ public class TwoFactorService {
     }
 
     // ── Login: 2FA-enabled user signs in → send OTP email ──────────────────
-
     /**
-     * Generates a fresh OTP for a user who is already fully 2FA-enabled and
-     * is attempting to log in. Does not touch pendingTwoFactor/twoFactorEnabled,
+     * Generates a fresh OTP for a user who is already fully 2FA-enabled and is
+     * attempting to log in. Does not touch pendingTwoFactor/twoFactorEnabled,
      * since those belong to the enable-2FA flow, not the login flow.
      */
     public void initiateLogin2FA(User user) {
@@ -132,11 +133,10 @@ public class TwoFactorService {
     }
 
     // ── Login: User submits the login OTP → completes authentication ───────
-
     /**
-     * Validates the OTP submitted during login for a 2FA-enabled user.
-     * On success, clears the OTP and returns the user so the caller can
-     * issue a JWT. On failure, throws ApiException.
+     * Validates the OTP submitted during login for a 2FA-enabled user. On
+     * success, clears the OTP and returns the user so the caller can issue a
+     * JWT. On failure, throws ApiException.
      */
     public User verifyLogin2FA(String email, String submittedCode) {
         User user = userRepository.findByEmail(email.toLowerCase().trim())
@@ -167,7 +167,6 @@ public class TwoFactorService {
     }
 
     // ── Resend: User requests a fresh OTP ───────────────────────────────────
-
     /**
      * Re-generates and re-sends the OTP for a user who has a pending 2FA
      * initiation. Resets the expiry window.
@@ -188,7 +187,6 @@ public class TwoFactorService {
     }
 
     // ── Disable: User toggles 2FA off (no OTP required) ────────────────────
-
     /**
      * Immediately disables 2FA. Also cancels any in-flight enable attempt.
      */
@@ -208,10 +206,9 @@ public class TwoFactorService {
     }
 
     // ── Cancel: User dismisses the OTP modal without verifying ─────────────
-
     /**
-     * Cancels a pending 2FA enable attempt (user closed the modal).
-     * Resets pendingTwoFactor and clears the OTP without enabling 2FA.
+     * Cancels a pending 2FA enable attempt (user closed the modal). Resets
+     * pendingTwoFactor and clears the OTP without enabling 2FA.
      */
     public UserResponse cancelPending2FA(Long userId) {
         User user = findUser(userId);
@@ -222,7 +219,6 @@ public class TwoFactorService {
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-
     private String generateOtp() {
         int code = 100_000 + RANDOM.nextInt(900_000);   // always exactly 6 digits
         return String.valueOf(code);
@@ -252,7 +248,6 @@ public class TwoFactorService {
     }
 
     // ── Email ────────────────────────────────────────────────────────────────
-
     private void sendOtpEmail(String toEmail, String fullName, String otp) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -291,7 +286,7 @@ public class TwoFactorService {
                         <tr>
                           <td style="background:#3d6b35;padding:28px 40px;text-align:center;">
                             <h1 style="margin:0;color:#ffffff;font-size:1.6rem;letter-spacing:1px;">
-                              🌿 ZeroWaste
+                              ZeroWaste
                             </h1>
                           </td>
                         </tr>
@@ -319,7 +314,7 @@ public class TwoFactorService {
                             </div>
 
                             <p style="margin:0 0 16px;color:#4a5a4a;font-size:0.9rem;line-height:1.6;">
-                              ⏱️ This code is valid for <strong>%d minutes</strong>.
+                              This OTP is valid for <strong>%d minutes</strong>.
                               If you did not request this, you can safely ignore this email —
                               your account remains unchanged.
                             </p>
@@ -335,8 +330,8 @@ public class TwoFactorService {
                           <td style="background:#f4f7f4;padding:20px 40px;text-align:center;
                                      border-top:1px solid #e0ebe0;">
                             <p style="margin:0;color:#7a8a7a;font-size:0.78rem;">
-                              © 2025 ZeroWaste · Smart Food Waste Management<br>
-                              This is an automated message — please do not reply.
+                              &copy; 2026 ZeroWaste - Smart Food Waste Management<br>
+                              This is an automated message - please do not reply.
                             </p>
                           </td>
                         </tr>
