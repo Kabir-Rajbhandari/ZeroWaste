@@ -1,0 +1,34 @@
+import { test, expect } from '@playwright/test';
+
+test('test', async ({ page }) => {
+  await page.goto('http://localhost:5173/');
+  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByRole('textbox', { name: 'Email' }).click();
+  await page.getByRole('textbox', { name: 'Email' }).fill('sakshampe642@gmail.com');
+  await page.locator('div').filter({ hasText: /^Password$/ }).click();
+  await page.getByRole('textbox', { name: 'Password' }).click();
+  await page.getByRole('textbox', { name: 'Password' }).fill('12345678');
+  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByText('DashboardFood InventoryBrowse').click();
+  await page.getByRole('button', { name: 'Food Inventory' }).click();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('textbox', { name: 'Food name' }).click();
+  await page.getByRole('textbox', { name: 'Food name' }).fill('Apple 3');
+  await page.getByLabel('Category').selectOption('Fruits');
+  await page.getByRole('spinbutton', { name: 'Quantity' }).dblclick();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).dblclick();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).dblclick();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('textbox', { name: 'Food name' }).click();
+  await page.getByRole('textbox', { name: 'Food name' }).fill('Apple ');
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).dblclick();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).dblclick();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).click();
+  await page.getByRole('spinbutton', { name: 'Quantity' }).fill('8');
+  await page.getByRole('textbox', { name: 'Expiry date' }).fill('2026-07-22');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+});
