@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-ZerowasteApplication<zerowaste>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.zerowaste.zerowaste.ZerowasteApplication",
+            "projectName": "zerowaste",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

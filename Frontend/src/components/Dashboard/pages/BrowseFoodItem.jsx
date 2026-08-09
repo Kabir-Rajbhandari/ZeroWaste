@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi, resolveAssetUrl } from "../../../services/api";
-import { logActivity } from "../../../utils/activitylog";
 
 const CATEGORIES = [
   "All Categories",

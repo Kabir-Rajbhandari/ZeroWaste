@@ -16,7 +16,7 @@
   },
   "homepage": "https://github.com/Kabir-Rajbhandari/ZeroWaste#readme",
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.1"
   }
 }
