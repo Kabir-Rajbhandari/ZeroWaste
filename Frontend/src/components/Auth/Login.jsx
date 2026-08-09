@@ -120,7 +120,10 @@ export default function Login({ onNavigate }) {
       if (data.twoFactorRequired) {
         setPendingEmail(form.email.trim());
         setLoginStage("otp");
-        setInfoMsg(data.message || "Enter the code sent to your email to finish signing in.");
+        setInfoMsg(
+          data.message ||
+            "Enter the code sent to your email to finish signing in.",
+        );
         setStatus("idle");
         return;
       }
@@ -142,10 +145,15 @@ export default function Login({ onNavigate }) {
     setErrMsg("");
     try {
       const data = await authApi.resendVerification(form.email.trim());
-      setInfoMsg(data.message || "Verification email resent! Please check your inbox.");
+      setInfoMsg(
+        data.message || "Verification email resent! Please check your inbox.",
+      );
       setResendStatus("sent");
     } catch (err) {
-      setErrMsg(err.message || "Couldn't resend the verification email. Please try again.");
+      setErrMsg(
+        err.message ||
+          "Couldn't resend the verification email. Please try again.",
+      );
       setResendStatus("idle");
     }
   };
@@ -162,7 +170,10 @@ export default function Login({ onNavigate }) {
     setErrMsg("");
     setInfoMsg("");
     try {
-      const data = await authApi.verifyLoginOtp(pendingEmail || form.email, otpCode.trim());
+      const data = await authApi.verifyLoginOtp(
+        pendingEmail || form.email,
+        otpCode.trim(),
+      );
       saveAuth(data);
       onNavigate?.("dashboard");
     } catch (err) {
@@ -393,7 +404,11 @@ export default function Login({ onNavigate }) {
                   className="form-control rounded-3 py-2 login-input"
                   placeholder="someone@gmail.com"
                   style={{ ...inputStyle, fontFamily: fonts.body }}
-                  value={loginStage === "otp" ? pendingEmail || form.email : form.email}
+                  value={
+                    loginStage === "otp"
+                      ? pendingEmail || form.email
+                      : form.email
+                  }
                   onChange={handleChange}
                   required
                   readOnly={loginStage === "otp"}
@@ -423,7 +438,9 @@ export default function Login({ onNavigate }) {
                     style={{ ...inputStyle, fontFamily: fonts.body }}
                     placeholder="123456"
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={(e) =>
+                      setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
                     required
                   />
                   <p className="text-muted small mt-2 mb-0">
@@ -460,7 +477,11 @@ export default function Login({ onNavigate }) {
                         }
                         style={{ color: colors.muted }}
                       >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        {showPassword ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
                       </button>
                     </div>
                     {fieldErrors.password && (
@@ -504,21 +525,27 @@ export default function Login({ onNavigate }) {
                     </button>
                   </div>
 
-                {needsVerification && loginStage === "credentials" && (
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-start"
-                  style={{ ...bodyTextStyle, fontSize: "0.9rem", color: colors.greenD }}
-                  onClick={handleResendVerification}
-                  disabled={resendStatus === "loading" || resendStatus === "sent"}
-                >
-                  {resendStatus === "loading"
-                    ? "Resending…"
-                    : resendStatus === "sent"
-                    ? "Verification email sent"
-                    : "Resend verification email"}
-                </button>
-              )}
+                  {needsVerification && loginStage === "credentials" && (
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 text-start"
+                      style={{
+                        ...bodyTextStyle,
+                        fontSize: "0.9rem",
+                        color: colors.greenD,
+                      }}
+                      onClick={handleResendVerification}
+                      disabled={
+                        resendStatus === "loading" || resendStatus === "sent"
+                      }
+                    >
+                      {resendStatus === "loading"
+                        ? "Resending…"
+                        : resendStatus === "sent"
+                          ? "Verification email sent"
+                          : "Resend verification email"}
+                    </button>
+                  )}
                 </>
               )}
 

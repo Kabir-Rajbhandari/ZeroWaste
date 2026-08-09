@@ -1,5 +1,14 @@
 package com.zerowaste.zerowaste.service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Objects;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
 import com.zerowaste.zerowaste.dto.AuthResponse;
 import com.zerowaste.zerowaste.dto.LoginOtpRequest;
 import com.zerowaste.zerowaste.dto.LoginRequest;
@@ -12,15 +21,6 @@ import com.zerowaste.zerowaste.dto.UserResponse;
 import com.zerowaste.zerowaste.exception.ApiException;
 import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.UserRepository;
-import com.zerowaste.zerowaste.service.TwoFactorService;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Objects;
-import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -34,10 +34,10 @@ public class AuthService {
     private static final int VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
 
     public AuthService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder,
-                       JwtService jwtService,
-                       TwoFactorService twoFactorService,
-                       EmailVerificationService emailVerificationService) {
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            TwoFactorService twoFactorService,
+            EmailVerificationService emailVerificationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -101,10 +101,9 @@ public class AuthService {
     }
 
     /**
-     * Re-sends the email-verification link for an unverified account.
-     * Used by the "Resend verification email" action on the sign-in page,
-     * which only appears once login has told the user their account isn't
-     * verified yet.
+     * Re-sends the email-verification link for an unverified account. Used by
+     * the "Resend verification email" action on the sign-in page, which only
+     * appears once login has told the user their account isn't verified yet.
      */
     public MessageResponse resendVerificationEmail(ResendVerificationRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
