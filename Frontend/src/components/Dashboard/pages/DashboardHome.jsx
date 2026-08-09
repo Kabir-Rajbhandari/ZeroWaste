@@ -94,26 +94,47 @@ export default function DashboardHome({ onNavigate }) {
     setLoading(true);
     setErrMsg("");
     try {
-      const [inventory, meals, saved, recent, communityImpact] =
+      const [inventory, meals, saved, recent, summary, communityImpact] =
         await Promise.all([
           foodApi.getAll(),
           foodApi.getMealsPlanned?.(),
           foodApi.getFoodSaved?.(),
           foodApi.getRecentActivity?.(),
+          analyticsApi.getSummary("month"),
           analyticsApi.getCommunityImpact(),
         ]);
       setItems(Array.isArray(inventory) ? inventory : []);
       setMealsPlanned(
         typeof meals === "number" ? meals : (meals?.count ?? null),
       );
-      setFoodSaved(typeof saved === "number" ? saved : (saved?.count ?? null));
+      // Prefer the period-aware analytics summary for the dashboard's
+      // "Food Saved" stat so it matches the Analytics page (month view).
+      setFoodSaved(
+        typeof summary?.foodSavedCount === "number"
+          ? summary.foodSavedCount
+          : typeof saved === "number"
+            ? saved
+            : (saved?.count ?? null),
+      );
       setImpact(communityImpact || null);
 
-      setActivity(
-        Array.isArray(recent) && recent.length > 0
-          ? recent
-          : getLocalActivity(6),
-      );
+      if (Array.isArray(recent) && recent.length > 0) {
+        // Backend returns FoodActivityLog entries; map to the local activity shape
+        const mapped = recent.slice(0, 6).map((r) => {
+          const type = r.type || "";
+          let title = "";
+          if (type === "USED") title = `Used ${r.category || "an item"}`;
+          else if (type === "DONATED")
+            title = `Donated ${r.category || "an item"}`;
+          else if (type === "WASTED")
+            title = `Expired ${r.category || "an item"}`;
+          else title = `${type} ${r.category || "item"}`;
+          return { id: r.id, title, timestamp: r.occurredAt };
+        });
+        setActivity(mapped);
+      } else {
+        setActivity(getLocalActivity(6));
+      }
     } catch (err) {
       setErrMsg(err.message || "Failed to load dashboard data.");
       setItems([]);

@@ -76,6 +76,13 @@ export const foodApi = {
     return request("/api/food-items/browse", { method: "GET" });
   },
 
+  getRecentActivity(limit = 6) {
+    return request(
+      `/api/food-items/recent-activity?limit=${encodeURIComponent(limit)}`,
+      { method: "GET" },
+    );
+  },
+
   donate(id, details) {
     return request(`/api/food-items/${id}/donate`, {
       method: "POST",
@@ -163,7 +170,6 @@ export const userApi = {
   },
 
   // Designed API for the following 2FA actions, but not currently used in the frontend:
-
 
   /** Request a fresh OTP if the previous one expired or wasn't received. */
   resend2FACode() {
@@ -260,10 +266,9 @@ export const analyticsApi = {
   },
 
   getWasteBreakdown(period) {
-  return request(
-    `/api/analytics/waste-breakdown?period=${encodeURIComponent(period)}`,
-    { method: "GET" },
-  );
-},
-
+    return request(
+      `/api/analytics/waste-breakdown?period=${encodeURIComponent(period)}`,
+      { method: "GET" },
+    );
+  },
 };

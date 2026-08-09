@@ -178,33 +178,33 @@ export default function Analytics() {
   const [errMsg, setErrMsg] = useState("");
 
   useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    setLoading(true);
-    setErrMsg("");
-    try {
-      const [summaryData, inventoryData, savedData, wasteData] =
-        await Promise.all([
-          analyticsApi.getSummary(period),
-          analyticsApi.getInventoryOverview(),
-          analyticsApi.getFoodSavedBreakdown(period),
-          analyticsApi.getWasteBreakdown(period),
-        ]);
-      if (cancelled) return;
-      setSummary(summaryData);
-      setInventoryOverview(inventoryData);
-      setFoodSavedBreakdown(savedData);
-      setWasteBreakdown(wasteData);
-    } catch (err) {
-      if (!cancelled) setErrMsg(err.message || "Failed to load analytics.");
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, [period]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setErrMsg("");
+      try {
+        const [summaryData, inventoryData, savedData, wasteData] =
+          await Promise.all([
+            analyticsApi.getSummary(period),
+            analyticsApi.getInventoryOverview(),
+            analyticsApi.getFoodSavedBreakdown(period),
+            analyticsApi.getWasteBreakdown(period),
+          ]);
+        if (cancelled) return;
+        setSummary(summaryData);
+        setInventoryOverview(inventoryData);
+        setFoodSavedBreakdown(savedData);
+        setWasteBreakdown(wasteData);
+      } catch (err) {
+        if (!cancelled) setErrMsg(err.message || "Failed to load analytics.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [period]);
 
   const handleExport = () => {
     window.print();
@@ -337,7 +337,10 @@ export default function Analytics() {
             <div className="col-12 col-lg-4">
               <div
                 className="rounded-4 p-4 h-100"
-                style={{ background: colors.authGreen, border: `2px solid ${colors.greenLrgb}` }}
+                style={{
+                  background: colors.authGreen,
+                  border: `2px solid ${colors.greenLrgb}`,
+                }}
               >
                 <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
                   Inventory Overview
@@ -346,7 +349,10 @@ export default function Analytics() {
                   <DonutChart data={inventoryOverview?.breakdown || []} />
                   <Legend data={inventoryOverview?.breakdown || []} />
                 </div>
-                <div className="text-end mt-3 small" style={{ color: colors.muted }}>
+                <div
+                  className="text-end mt-3 small"
+                  style={{ color: colors.muted }}
+                >
                   Total Items:{" "}
                   <span className="fw-bold" style={{ color: colors.authGreen }}>
                     {inventoryOverview?.totalItems ?? 0}
@@ -358,7 +364,10 @@ export default function Analytics() {
             <div className="col-12 col-lg-4">
               <div
                 className="rounded-4 p-4 h-100"
-                style={{ background: colors.authGreen, border: `2px solid ${colors.greenLrgb}` }}
+                style={{
+                  background: colors.authGreen,
+                  border: `2px solid ${colors.greenLrgb}`,
+                }}
               >
                 <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
                   Food Saved
@@ -367,7 +376,10 @@ export default function Analytics() {
                   <BarChart data={foodSavedBreakdown?.breakdown || []} />
                   <Legend data={foodSavedBreakdown?.breakdown || []} />
                 </div>
-                <div className="text-end mt-3 small" style={{ color: colors.muted }}>
+                <div
+                  className="text-end mt-3 small"
+                  style={{ color: colors.muted }}
+                >
                   Total Items:{" "}
                   <span className="fw-bold" style={{ color: colors.authGreen }}>
                     {foodSavedBreakdown?.totalItems ?? 0}
@@ -379,19 +391,29 @@ export default function Analytics() {
             <div className="col-12 col-lg-4">
               <div
                 className="rounded-4 p-4 h-100"
-                style={{ background: colors.authGreen, border: `2px solid ${colors.greenLrgb}` }}
+                style={{
+                  background: colors.authGreen,
+                  border: `2px solid ${colors.greenLrgb}`,
+                }}
               >
                 <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
                   Waste by Category
                 </h6>
-                <p className="small mb-3" style={{ color: colors.muted, marginTop: "-0.5rem" }}>
-                  Which categories are actually spoiling, not just being used or donated.
+                <p
+                  className="small mb-3"
+                  style={{ color: colors.muted, marginTop: "-0.5rem" }}
+                >
+                  Which categories are actually spoiling, not just being used or
+                  donated.
                 </p>
                 <div className="d-flex align-items-center gap-4 flex-wrap">
                   <DonutChart data={wasteBreakdown?.breakdown || []} />
                   <Legend data={wasteBreakdown?.breakdown || []} />
                 </div>
-                <div className="text-end mt-3 small" style={{ color: colors.muted }}>
+                <div
+                  className="text-end mt-3 small"
+                  style={{ color: colors.muted }}
+                >
                   Total Items:{" "}
                   <span className="fw-bold" style={{ color: colors.authGreen }}>
                     {wasteBreakdown?.totalItems ?? 0}
