@@ -9,7 +9,8 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
-import { foodApi, resolveAssetUrl } from "../../../services/api";
+import { foodApi} from "../../../services/api";
+import { resolveAssetUrl } from "../../../services/api";
 
 const CATEGORIES = [
   "All Categories",
