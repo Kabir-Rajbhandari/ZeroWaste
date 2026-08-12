@@ -30,7 +30,7 @@ public class EmailVerificationService {
      * Base URL of the frontend app, used to build the link embedded in the
      * email. Defaults to the Vite dev server address.
      */
-    @Value("${app.frontend.base-url:http://localhost:*}")
+    @Value("${app.frontend.base-url:${app.frontend.url:http://localhost:5173}}")
     private String frontendBaseUrl;
 
     public EmailVerificationService(JavaMailSender mailSender) {
