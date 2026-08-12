@@ -13,6 +13,103 @@ import { foodApi } from "../../../services/api";
 import { logActivity } from "../../../utils/activitylog";
 import DonateModal from "../DonateModal";
 
+// Inline confirm dialog component for FoodInventory.
+// Kept inside this file for easy recognition and to avoid creating a separate shared folder.
+function InlineConfirmDialog({
+  open,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmLabel = "OK",
+  cancelLabel = "Cancel",
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={() => onCancel?.()}
+      style={{
+        position: "fixed",
+        left: 0,
+        top: 0,
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 10000,
+        padding: 16,
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: colors.authBg || "#ffffff",
+          color: colors.charcoal,
+          borderRadius: 12,
+          maxWidth: 540,
+          width: "100%",
+          padding: "22px 24px",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+          border: `1px solid rgba(0,0,0,0.06)`,
+        }}
+      >
+        {title && (
+          <h3
+            style={{
+              margin: 0,
+              fontFamily: fonts.body,
+              color: colors.charcoal,
+            }}
+          >
+            {title}
+          </h3>
+        )}
+        <p style={{ marginTop: 10, marginBottom: 16, color: colors.charcoal }}>
+          {message}
+        </p>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "8px 14px",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 600,
+              color: colors.charcoal,
+            }}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            style={{
+              background: colors.green,
+              color: "#fff",
+              border: "none",
+              padding: "8px 14px",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CATEGORIES = [
   "All Categories",
   "Fruits",
@@ -44,6 +141,8 @@ export default function FoodInventory({ onNavigate }) {
   const [errMsg, setErrMsg] = useState("");
   const [donateTarget, setDonateTarget] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPayload, setConfirmPayload] = useState(null);
   const [page, setPage] = useState(1);
 
   const loadItems = useCallback(async () => {
@@ -66,7 +165,11 @@ export default function FoodInventory({ onNavigate }) {
   }, [loadItems]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this food item?")) return;
+    setConfirmPayload({ type: "delete", id });
+    setConfirmOpen(true);
+  };
+
+  const doDelete = async (id) => {
     const target = items.find((item) => item.id === id);
     try {
       await foodApi.delete(id);
@@ -78,12 +181,11 @@ export default function FoodInventory({ onNavigate }) {
   };
 
   const handleUsed = async (id) => {
-    if (
-      !window.confirm(
-        "Mark this item as used? It will be removed from your inventory and counted toward Food Saved.",
-      )
-    )
-      return;
+    setConfirmPayload({ type: "used", id });
+    setConfirmOpen(true);
+  };
+
+  const doMarkUsed = async (id) => {
     const target = items.find((item) => item.id === id);
     try {
       await foodApi.markUsed(id);
@@ -301,98 +403,126 @@ export default function FoodInventory({ onNavigate }) {
             className="row g-4"
             style={{ alignSelf: "flex-start", width: "100%" }}
           >
-            {paginatedItems.map((item) => (
-              <div className="col-12 col-md-6 col-lg-4" key={item.id}>
-                <div
-                  className="d-flex gap-3 p-3 rounded-4 h-100"
-                  style={{
-                    background: colors.low_greenFade,
-                    boxShadow: "0 0px 5px rgb(169, 169, 169)",
-                  }}
-                >
-                  <img
-                    src={item.imageUrl || DEFAULT_IMAGE}
-                    alt={item.name}
-                    className="rounded-3 flex-shrink-0"
-                    style={{ width: 90, height: 84, objectFit: "contain" }}
-                  />
-                  <div className="flex-grow-1">
-                    <div
-                      className="fw-bold"
-                      style={{
-                        color: colors.greenD,
-                      }}
-                    >
-                      {item.name}
-                    </div>
-                    <div className="small" style={{ color: colors.charcoal }}>
-                      {item.quantity} {item.quantityUnit} - {item.category}
-                    </div>
-                    <div className="small" style={{ color: colors.muted }}>
-                      Expires {formatDate(item.expiryDate)}
-                    </div>
-
-                    <div className="d-flex align-items-center gap-3 mb-2 mt-1">
-                      <button
-                        type="button"
-                        className="btn btn-link p-0"
-                        style={{ color: colors.greenL }}
-                        onClick={() => onNavigate?.("edit-food", item)}
-                        title="Edit"
-                      >
-                        <Pencil size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-link p-0"
-                        style={{ color: "#c0392b" }}
-                        onClick={() => handleDelete(item.id)}
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-
-                    <div className="d-flex gap-4">
-                      <button
-                        type="button"
-                        className="btn btn-sm flex-grow-1 used-btn"
+            {paginatedItems.map((item) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const expiry = item.expiryDate ? new Date(item.expiryDate) : null;
+              const isExpired = expiry && expiry < today && !item.donated;
+              return (
+                <div className="col-12 col-md-6 col-lg-4" key={item.id}>
+                  <div
+                    className="d-flex gap-3 p-3 rounded-4 h-100"
+                    style={{
+                      background: colors.low_greenFade,
+                      boxShadow: "0 0px 5px rgb(169, 169, 169)",
+                    }}
+                  >
+                    <img
+                      src={item.imageUrl || DEFAULT_IMAGE}
+                      alt={item.name}
+                      className="rounded-3 flex-shrink-0"
+                      style={{ width: 90, height: 84, objectFit: "contain" }}
+                    />
+                    <div className="flex-grow-1">
+                      <div
+                        className="fw-bold"
                         style={{
-                          opacity: 0.65,
-                          borderColor: colors.green,
-                          color: colors.charcoal,
-                          fontWeight: 600,
-                          borderRadius: 4,
-                          borderWidth: "2px",
-                          padding: "0.45rem 1.25rem",
-                          fontSize: "0.9rem",
-                          transition: "all 0.5s ease",
+                          color: colors.greenD,
                         }}
-                        onClick={() => handleUsed(item.id)}
                       >
-                        Used
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm flex-grow-1 donate-btn"
-                        style={{
-                          ...btnPrimaryStyle,
-                          borderRadius: 4,
-                          fontWeight: 600,
-                          padding: "0.45rem 1.15rem",
-                          fontSize: "0.9rem",
-                          color: colors.white,
-                          transition: "all 0.5s ease",
-                        }}
-                        onClick={() => setDonateTarget(item)}
-                      >
-                        Donate
-                      </button>
+                        {item.name}
+                      </div>
+                      <div className="small" style={{ color: colors.charcoal }}>
+                        {item.quantity} {item.quantityUnit} - {item.category}
+                      </div>
+                      <div className="small" style={{ color: colors.muted }}>
+                        Expires {formatDate(item.expiryDate)}
+                      </div>
+
+                      <div className="d-flex align-items-center gap-3 mb-2 mt-1">
+                        <button
+                          type="button"
+                          className="btn btn-link p-0"
+                          style={{ color: colors.greenL }}
+                          onClick={() => onNavigate?.("edit-food", item)}
+                          title="Edit"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-link p-0"
+                          style={{ color: "#c0392b" }}
+                          onClick={() => handleDelete(item.id)}
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+
+                      <div className="d-flex gap-4">
+                        {isExpired ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm flex-grow-1"
+                            style={{
+                              background: "#c0392b",
+                              border: "none",
+                              color: colors.white,
+                              boxShadow: "0 0px 5px rgb(169, 169, 169)",
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                              borderRadius: 4,
+                              padding: "0.45rem 1.15rem",
+                            }}
+                            disabled
+                          >
+                            Expired
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-sm flex-grow-1 used-btn"
+                              style={{
+                                opacity: 1,
+                                borderColor: colors.green,
+                                color: colors.charcoal,
+                                fontWeight: 600,
+                                borderRadius: 4,
+                                borderWidth: "2px",
+                                padding: "0.45rem 1.25rem",
+                                fontSize: "0.9rem",
+                                transition: "all 0.5s ease",
+                              }}
+                              onClick={() => handleUsed(item.id)}
+                            >
+                              Used
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm flex-grow-1 donate-btn"
+                              style={{
+                                ...btnPrimaryStyle,
+                                borderRadius: 4,
+                                fontWeight: 600,
+                                padding: "0.45rem 1.15rem",
+                                fontSize: "0.9rem",
+                                color: colors.white,
+                                transition: "all 0.5s ease",
+                              }}
+                              onClick={() => setDonateTarget(item)}
+                            >
+                              Donate
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -437,6 +567,31 @@ export default function FoodInventory({ onNavigate }) {
         item={donateTarget}
         onCancel={() => setDonateTarget(null)}
         onConfirm={handleDonateConfirm}
+      />
+      <InlineConfirmDialog
+        open={confirmOpen}
+        title={
+          confirmPayload?.type === "delete" ? "Delete item" : "Mark as used"
+        }
+        message={
+          confirmPayload?.type === "delete"
+            ? "Delete this food item?"
+            : "Mark this item as used? It will be removed from your inventory and counted toward Food Saved."
+        }
+        confirmLabel={confirmPayload?.type === "delete" ? "Delete" : "OK"}
+        cancelLabel="Cancel"
+        onCancel={() => {
+          setConfirmOpen(false);
+          setConfirmPayload(null);
+        }}
+        onConfirm={async () => {
+          const payload = confirmPayload;
+          setConfirmOpen(false);
+          setConfirmPayload(null);
+          if (!payload) return;
+          if (payload.type === "delete") await doDelete(payload.id);
+          if (payload.type === "used") await doMarkUsed(payload.id);
+        }}
       />
     </div>
   );

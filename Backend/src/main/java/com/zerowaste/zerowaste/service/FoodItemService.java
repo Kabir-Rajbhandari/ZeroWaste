@@ -255,6 +255,15 @@ public class FoodItemService {
         foodItemRepository.delete(item);
     }
 
+    /**
+     * Return recent activity log entries for the given user, newest first.
+     */
+    public List<FoodActivityLog> getRecentActivity(Long userId, int limit) {
+        return activityLogRepository.findByUserIdOrderByOccurredAtDesc(userId).stream()
+                .limit(limit)
+                .toList();
+    }
+
     private void validateCategory(String category) {
         if (!ALLOWED_CATEGORIES.contains(category)) {
             throw new ApiException("Invalid category.", HttpStatus.BAD_REQUEST);

@@ -9,8 +9,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
-import { foodApi} from "../../../services/api";
-import { resolveAssetUrl } from "../../../services/api";
+import { foodApi, resolveAssetUrl } from "../../../services/api";
 
 const CATEGORIES = [
   "All Categories",
@@ -671,50 +670,46 @@ export default function BrowseFoodItem({ onNavigate }) {
               ))}
             </div>
 
-            {totalPages > 1 && (
-              <div className="d-flex align-items-center justify-content-end gap-3 mt-4">
-                <button
-                  type="button"
-                  className="btn btn-sm p-1"
-                  style={{
-                    color: currentPage === 1 ? colors.border : colors.charcoal,
-                    background: "none",
-                    border: "none",
-                  }}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  aria-label="Previous page"
-                >
-                  <ChevronsLeft size={20} />
-                </button>
-                <span
-                  className="fw-semibold"
-                  style={{ color: colors.charcoal }}
-                >
-                  {currentPage}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-sm p-1"
-                  style={{
-                    color:
-                      currentPage === totalPages
-                        ? colors.border
-                        : colors.charcoal,
-                    background: "none",
-                    border: "none",
-                  }}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  aria-label="Next page"
-                >
-                  <ChevronsRight size={20} />
-                </button>
-              </div>
-            )}
+            {/* pagination moved outside the content container for consistent layout */}
           </>
         )}
       </div>
+      {totalPages > 1 && (
+        <div className="d-flex align-items-center justify-content-end gap-3 mt-4">
+          <button
+            type="button"
+            className="btn btn-sm p-1"
+            style={{
+              color: currentPage === 1 ? colors.border : colors.charcoal,
+              background: "none",
+              border: "none",
+            }}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            aria-label="Previous page"
+          >
+            <ChevronsLeft size={20} />
+          </button>
+          <span className="fw-semibold" style={{ color: colors.charcoal }}>
+            {currentPage}
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm p-1"
+            style={{
+              color:
+                currentPage === totalPages ? colors.border : colors.charcoal,
+              background: "none",
+              border: "none",
+            }}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            aria-label="Next page"
+          >
+            <ChevronsRight size={20} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

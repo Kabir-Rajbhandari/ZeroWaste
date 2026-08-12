@@ -1,11 +1,7 @@
 package com.zerowaste.zerowaste.controller;
 
-import com.zerowaste.zerowaste.dto.DonateRequest;
-import com.zerowaste.zerowaste.dto.FoodItemRequest;
-import com.zerowaste.zerowaste.dto.FoodItemResponse;
-import com.zerowaste.zerowaste.service.DonationRequestService;
-import com.zerowaste.zerowaste.service.FoodItemService;
-import jakarta.validation.Valid;
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,10 +11,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.zerowaste.zerowaste.dto.DonateRequest;
+import com.zerowaste.zerowaste.dto.FoodItemRequest;
+import com.zerowaste.zerowaste.dto.FoodItemResponse;
+import com.zerowaste.zerowaste.service.DonationRequestService;
+import com.zerowaste.zerowaste.service.FoodItemService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/food-items")
@@ -30,6 +33,13 @@ public class FoodItemController {
     public FoodItemController(FoodItemService foodItemService, DonationRequestService donationRequestService) {
         this.foodItemService = foodItemService;
         this.donationRequestService = donationRequestService;
+    }
+
+    @GetMapping("/recent-activity")
+    public List<com.zerowaste.zerowaste.model.FoodActivityLog> recentActivity(
+            @RequestParam(defaultValue = "6") int limit,
+            @AuthenticationPrincipal Long userId) {
+        return foodItemService.getRecentActivity(userId, limit);
     }
 
     @GetMapping

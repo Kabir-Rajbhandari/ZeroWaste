@@ -1,6 +1,5 @@
 package com.zerowaste.zerowaste.repository;
 
-
 import java.time.Instant;
 import java.util.List;
 
@@ -13,4 +12,6 @@ public interface FoodActivityLogRepository extends JpaRepository<FoodActivityLog
     List<FoodActivityLog> findByUserIdAndTypeAndOccurredAtGreaterThanEqual(Long userId, String type, Instant since);
 
     List<FoodActivityLog> findByUserIdAndType(Long userId, String type);
+
+    List<FoodActivityLog> findByUserIdOrderByOccurredAtDesc(Long userId);
 }
