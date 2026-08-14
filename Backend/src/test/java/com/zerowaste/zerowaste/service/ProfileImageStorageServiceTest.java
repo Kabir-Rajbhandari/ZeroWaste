@@ -1,30 +1,48 @@
 package com.zerowaste.zerowaste.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
+import com.zerowaste.zerowaste.exception.ApiException;
+import com.zerowaste.zerowaste.service.ProfileImageStorageService.StoredImage;
+
 class ProfileImageStorageServiceTest {
 
-    @Test
-    void storesUploadedImageFileAndReturnsPublicUrl() throws Exception {
-        Path tempDir = Files.createTempDirectory("profile-images-test");
-        ProfileImageStorageService service = new ProfileImageStorageService(tempDir.toString());
+    private final ProfileImageStorageService service = new ProfileImageStorageService();
 
+    @Test
+    void readsUploadedImageBytesAndContentType() {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "My Photo.png",
                 "image/png",
                 "sample-image-data".getBytes(StandardCharsets.UTF_8));
 
-        String storedUrl = service.storeProfileImage(file);
+        StoredImage stored = service.readProfileImage(file);
 
-        assertThat(storedUrl).startsWith("/uploads/profile-images/");
-        assertThat(Files.exists(tempDir.resolve(storedUrl.substring(storedUrl.lastIndexOf('/') + 1)))).isTrue();
+        assertThat(stored.contentType()).isEqualTo("image/png");
+        assertThat(stored.data()).isEqualTo("sample-image-data".getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void rejectsEmptyFile() {
+        MockMultipartFile empty = new MockMultipartFile("file", "empty.png", "image/png", new byte[0]);
+
+        assertThatThrownBy(() -> service.readProfileImage(empty))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void rejectsNonImageContentType() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.readProfileImage(file))
+                .isInstanceOf(ApiException.class);
     }
 }

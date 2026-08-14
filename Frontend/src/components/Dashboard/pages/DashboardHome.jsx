@@ -8,6 +8,7 @@ import {
   Search,
   CalendarDays,
   Bell,
+  Clock,
 } from "lucide-react";
 import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
 import { analyticsApi, foodApi } from "../../../services/api";
@@ -15,8 +16,92 @@ import {
   getRecentActivity as getLocalActivity,
   onActivityLogged,
 } from "../../../utils/activitylog";
+import { useCountUp } from "../../../utils/useCountUp";
 
 const EXPIRING_WINDOW_DAYS = 7;
+
+const DEFAULT_IMAGE =
+  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop";
+
+function formatActivityTime(timestamp) {
+  if (!timestamp) return "Just now";
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return "Just now";
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function getActivityConfig(type) {
+  switch (type) {
+    case "ADDED":
+      return { bg: "#E8F5E9", color: "#2E7D32", label: "Added" };
+    case "UPDATED":
+      return { bg: "#E3F2FD", color: "#1565C0", label: "Updated" };
+    case "USED":
+      return { bg: "#FFF8E1", color: "#B78103", label: "Used" };
+    case "DONATED":
+      return { bg: "#F3E5F5", color: "#7B1FA2", label: "Donated" };
+    case "WASTED":
+      return { bg: "#FFEBEE", color: "#C62828", label: "Expired" };
+    case "REMOVED":
+      return { bg: "#F3F4F6", color: "#4B5563", label: "Removed" };
+    default:
+      return { bg: "#E8F5E9", color: "#2E7D32", label: "Activity" };
+  }
+}
+
+function describeActivity(entry) {
+  const type = entry.type || "";
+  const name = entry.itemName || entry.category || "an item";
+  switch (type) {
+    case "ADDED":
+      return `Added ${name}`;
+    case "UPDATED":
+      return `Updated ${name}`;
+    case "USED":
+      return `Used ${name}`;
+    case "DONATED":
+      return `Donated ${name}`;
+    case "WASTED":
+      return `Expired ${name}`;
+    case "REMOVED":
+      return `Removed ${name}`;
+    case "REQUESTED":
+      return `Requested ${name}`;
+    default:
+      return entry.title || `${type} ${name}`;
+  }
+}
+
+function mapBackendActivity(recent) {
+  return (Array.isArray(recent) ? recent : []).map((r) => ({
+    id: `backend-${r.id || Math.random()}`,
+    type: r.type || "ADDED",
+    title: describeActivity(r),
+    timestamp: r.occurredAt || r.createdAt || new Date().toISOString(),
+  }));
+}
+
+function mergeActivity(backendEntries, limit = 20) {
+  const localMealPlans = getLocalActivity(20)
+    .filter((e) => (e.title || "").startsWith("Planned meal"))
+    .map((e) => ({
+      id: `local-${e.id || Math.random()}`,
+      type: "PLANNED",
+      title: e.title,
+      timestamp: e.timestamp || new Date().toISOString(),
+    }));
+
+  return [...backendEntries, ...localMealPlans]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, limit);
+}
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -85,7 +170,7 @@ export default function DashboardHome({ onNavigate }) {
   const displayedActivity = useMemo(
     () =>
       [...activity].sort(
-        (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
       ),
     [activity],
   );
@@ -107,8 +192,6 @@ export default function DashboardHome({ onNavigate }) {
       setMealsPlanned(
         typeof meals === "number" ? meals : (meals?.count ?? null),
       );
-      // Prefer the period-aware analytics summary for the dashboard's
-      // "Food Saved" stat so it matches the Analytics page (month view).
       setFoodSaved(
         typeof summary?.foodSavedCount === "number"
           ? summary.foodSavedCount
@@ -119,21 +202,9 @@ export default function DashboardHome({ onNavigate }) {
       setImpact(communityImpact || null);
 
       if (Array.isArray(recent) && recent.length > 0) {
-        // Backend returns FoodActivityLog entries; map to the local activity shape
-        const mapped = recent.slice(0, 6).map((r) => {
-          const type = r.type || "";
-          let title = "";
-          if (type === "USED") title = `Used ${r.category || "an item"}`;
-          else if (type === "DONATED")
-            title = `Donated ${r.category || "an item"}`;
-          else if (type === "WASTED")
-            title = `Expired ${r.category || "an item"}`;
-          else title = `${type} ${r.category || "item"}`;
-          return { id: r.id, title, timestamp: r.occurredAt };
-        });
-        setActivity(mapped);
+        setActivity(mergeActivity(mapBackendActivity(recent)));
       } else {
-        setActivity(getLocalActivity(6));
+        setActivity(mergeActivity([]));
       }
     } catch (err) {
       setErrMsg(err.message || "Failed to load dashboard data.");
@@ -156,7 +227,14 @@ export default function DashboardHome({ onNavigate }) {
   }, [loadDashboard]);
 
   useEffect(() => {
-    return onActivityLogged(() => setActivity(getLocalActivity(6)));
+    return onActivityLogged(async () => {
+      try {
+        const recent = await foodApi.getRecentActivity?.();
+        setActivity(mergeActivity(mapBackendActivity(recent)));
+      } catch {
+        setActivity(mergeActivity([]));
+      }
+    });
   }, []);
 
   const expiringSoon = useMemo(() => {
@@ -229,6 +307,37 @@ export default function DashboardHome({ onNavigate }) {
   return (
     <div style={{ fontFamily: fonts.body }}>
       <style>{`
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes slideInLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
         .btn-dashboard-action {
           opacity: 0.75;
           transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
@@ -240,15 +349,36 @@ export default function DashboardHome({ onNavigate }) {
           box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
         }
 
+        .dashboard-stat-card {
+          animation: slideInUp 0.6s ease-out backwards;
+        }
+
+        .dashboard-stat-card:hover {
+          transform: translateY(-8px) !important;
+        }
+
+        .dashboard-main-card {
+          animation: slideInUp 0.6s ease-out backwards;
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+        }
+
+        .dashboard-main-card:hover {
+          transform: translateY(-4px);
+        }
+
+        .activity-item {
+          animation: fadeIn 0.4s ease-out backwards;
+        }
+
         .recent-activity-scroll {
-          max-height: 280px;
+          max-height: 290px;
           overflow-y: auto;
           padding-right: 4px;
           scrollbar-width: thin;
         }
 
         .recent-activity-scroll::-webkit-scrollbar {
-          width: 6px;
+          width: 5px;
         }
 
         .recent-activity-scroll::-webkit-scrollbar-thumb {
@@ -295,57 +425,73 @@ export default function DashboardHome({ onNavigate }) {
           marginBottom: "1.5rem",
         }}
       >
-        {stats.map(({ label, value, caption, icon: Icon, to }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => onNavigate?.(to)}
-            style={{
-              ...cardBase,
-              padding: "1.25rem 1.4rem",
-              textAlign: "left",
-              cursor: "pointer",
-              transition: "transform 0.15s ease, box-shadow 0.15s ease",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = shadows.md)}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = shadows.sm)}
-          >
-            <div
+        {stats.map(({ label, value, caption, icon: Icon, to }, idx) => {
+          const isNumeric = typeof value === "number";
+          const animatedValue = useCountUp(
+            isNumeric ? value : 0,
+            2000,
+            !loading && isNumeric,
+          );
+          const displayValue = isNumeric ? animatedValue : value;
+
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onNavigate?.(to)}
+              className="dashboard-stat-card"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
+                ...cardBase,
+                padding: "1.25rem 1.4rem",
+                textAlign: "left",
+                cursor: "pointer",
+                transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                animationDelay: `${idx * 100}ms`,
               }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.boxShadow = shadows.md)
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.boxShadow = shadows.sm)
+              }
             >
-              <span
+              <div
                 style={{
-                  fontSize: "1rem",
-                  fontWeight: 600,
-                  color: colors.charcoal,
-                  opacity: 0.7,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
                 }}
               >
-                {label}
-              </span>
-              <Icon size={50} color={colors.greenL} strokeWidth={2} />
-            </div>
-            <div
-              style={{
-                fontFamily: fonts.body,
-                fontSize: "3rem",
-                opacity: 0.7,
-                fontWeight: 700,
-                color: colors.charcoal,
-                margin: "0.35rem 0 0.15rem",
-              }}
-            >
-              {loading ? "…" : value}
-            </div>
-            <div style={{ fontSize: "0.9rem", color: colors.muted }}>
-              {caption}
-            </div>
-          </button>
-        ))}
+                <span
+                  style={{
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    color: colors.charcoal,
+                    opacity: 0.7,
+                  }}
+                >
+                  {label}
+                </span>
+                <Icon size={50} color={colors.greenL} strokeWidth={2} />
+              </div>
+              <div
+                style={{
+                  fontFamily: fonts.body,
+                  fontSize: "3rem",
+                  opacity: 0.7,
+                  fontWeight: 700,
+                  color: colors.charcoal,
+                  margin: "0.35rem 0 0.15rem",
+                }}
+              >
+                {loading ? "…" : displayValue}
+              </div>
+              <div style={{ fontSize: "0.9rem", color: colors.muted }}>
+                {caption}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* ---------- Main grid: Expiring / Inventory / Activity ---------- */}
@@ -358,7 +504,10 @@ export default function DashboardHome({ onNavigate }) {
         }}
       >
         {/* Expiring Soon */}
-        <div style={{ ...cardBase, padding: "1.25rem 1.4rem" }}>
+        <div
+          className="dashboard-main-card"
+          style={{ ...cardBase, padding: "1.25rem 1.4rem" }}
+        >
           <div
             style={{
               display: "flex",
@@ -404,18 +553,14 @@ export default function DashboardHome({ onNavigate }) {
                   }}
                 >
                   <img
-                    src={
-                      item.imageUrl ||
-                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
-                    }
+                    src={item.imageUrl || DEFAULT_IMAGE}
                     alt={item.name || "Food item"}
+                    className="rounded-3 flex-shrink-0"
                     style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: 4,
-                      backgroundColor: colors.low_greenFade,
+                      width: 40,
+                      height: 40,
                       objectFit: "contain",
-                      flexShrink: 0,
+                      backgroundColor: colors.low_greenFade,
                     }}
                   />
                   <div style={{ flexGrow: 1, minWidth: 0 }}>
@@ -455,11 +600,13 @@ export default function DashboardHome({ onNavigate }) {
 
         {/* Inventory Overview */}
         <div
+          className="dashboard-main-card"
           style={{
             ...cardBase,
             padding: "1.25rem 1.4rem",
             display: "flex",
             flexDirection: "column",
+            animationDelay: "0.2s",
           }}
         >
           <div
@@ -592,16 +739,31 @@ export default function DashboardHome({ onNavigate }) {
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div style={{ ...cardBase, padding: "1.25rem 1.4rem" }}>
-          <h2 style={{ ...cardTitleStyle, marginBottom: "1rem" }}>
-            Recent Activity
-          </h2>
+        {/* Recent Activity Card (Text-Only UI) */}
+        <div
+          className="dashboard-main-card"
+          style={{
+            ...cardBase,
+            padding: "1.25rem 1.4rem",
+            animationDelay: "0.3s",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "1rem",
+            }}
+          >
+            <h2 style={cardTitleStyle}>Recent Activity</h2>
+          </div>
+
           {loading ? (
             <div style={{ color: colors.muted, fontSize: "0.85rem" }}>
               Loading…
             </div>
-          ) : activity.length === 0 ? (
+          ) : displayedActivity.length === 0 ? (
             <div style={{ color: colors.muted, fontSize: "0.85rem" }}>
               No recent activity yet.
             </div>
@@ -611,34 +773,86 @@ export default function DashboardHome({ onNavigate }) {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "0.9rem",
+                gap: "0.75rem",
               }}
             >
-              {displayedActivity.slice(-6).map((a) => (
-                <div
-                  key={a.id || a.title + a.time}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                  }}
-                >
-                  <div style={{ flexGrow: 1, minWidth: 0 }}>
-                    <div
+              {displayedActivity.slice(0, 5).map((a, idx) => {
+                const config = getActivityConfig(a.type);
+
+                return (
+                  <div
+                    key={a.id}
+                    className="activity-item"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "0.75rem",
+                      backgroundColor: "#FFFFFF",
+                      padding: "0.65rem 0.85rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid #E5E7EB",
+                      transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                      animationDelay: `${idx * 50}ms`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.boxShadow =
+                        "0 4px 10px rgba(0, 0, 0, 0.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    {/* Text Details (Title & Timestamp) */}
+                    <div style={{ flexGrow: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          color: colors.charcoal,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {a.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.72rem",
+                          color: colors.muted,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.25rem",
+                          marginTop: "0.15rem",
+                        }}
+                      >
+                        <Clock size={11} />
+                        {formatActivityTime(a.timestamp)}
+                      </div>
+                    </div>
+
+                    {/* Category Tag Pill (Text Only) */}
+                    <span
                       style={{
-                        fontSize: "0.85rem",
-                        fontWeight: 600,
-                        color: colors.charcoal,
+                        fontSize: "0.65rem",
+                        fontWeight: 700,
+                        backgroundColor: config.bg,
+                        color: config.color,
+                        padding: "0.2rem 0.55rem",
+                        borderRadius: "999px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.3px",
+                        flexShrink: 0,
                       }}
                     >
-                      {a.title}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: colors.muted }}>
-                      {a.time}
-                    </div>
+                      {config.label}
+                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -656,7 +870,7 @@ export default function DashboardHome({ onNavigate }) {
             gap: "1rem",
           }}
         >
-          {quickActions.map(({ label, icon: Icon, to }) => (
+          {quickActions.map(({ label, icon: Icon, to }, idx) => (
             <button
               key={label}
               type="button"
@@ -676,6 +890,9 @@ export default function DashboardHome({ onNavigate }) {
                 fontSize: "0.95rem",
                 fontWeight: 600,
                 borderRadius: 6,
+                animation: `slideInUp 0.6s ease-out ${0.4 + idx * 0.1}s backwards`,
+                transition:
+                  "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
               }}
             >
               <Icon size={22} strokeWidth={1.75} />

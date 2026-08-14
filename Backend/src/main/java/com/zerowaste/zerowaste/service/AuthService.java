@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.zerowaste.zerowaste.service.TwoFactorService;
 import com.zerowaste.zerowaste.dto.AuthResponse;
 import com.zerowaste.zerowaste.dto.LoginOtpRequest;
 import com.zerowaste.zerowaste.dto.LoginRequest;

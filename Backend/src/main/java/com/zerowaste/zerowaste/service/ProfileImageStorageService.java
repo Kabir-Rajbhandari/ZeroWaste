@@ -1,49 +1,46 @@
 package com.zerowaste.zerowaste.service;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.zerowaste.zerowaste.exception.ApiException;
+
+/**
+ * Validates and reads uploaded profile-image files into memory so they can
+ * be persisted straight into the database (see User.profileImageData) rather
+ * than written to the local disk. Storing on local disk doesn't survive
+ * redeploys/restarts and doesn't work once you run more than one app
+ * instance, so the image bytes themselves are the source of truth in the DB.
+ */
 @Service
 public class ProfileImageStorageService {
 
-    private final Path storageDirectory;
+    private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024; // 5MB
 
-    public ProfileImageStorageService(@Value("${app.upload.dir:uploads/profile-images}") String storagePath) {
-        this.storageDirectory = Path.of(storagePath).toAbsolutePath().normalize();
-        try {
-            Files.createDirectories(this.storageDirectory);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to initialize profile image storage", e);
-        }
+    /** In-memory representation of an uploaded image, ready to be saved to the DB. */
+    public record StoredImage(byte[] data, String contentType) {
     }
 
-    public String storeProfileImage(MultipartFile file) {
+    public StoredImage readProfileImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Profile image file is required.");
+            throw new ApiException("Profile image file is required.", HttpStatus.BAD_REQUEST);
+        }
+        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new ApiException("Profile image must be smaller than 5MB.", HttpStatus.BAD_REQUEST);
         }
 
-        String originalFileName = file.getOriginalFilename();
-        String extension = ".png";
-        if (originalFileName != null && originalFileName.contains(".")) {
-            extension = originalFileName.substring(originalFileName.lastIndexOf('.'));
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            throw new ApiException("Only image files are allowed for profile pictures.", HttpStatus.BAD_REQUEST);
         }
-
-        String storedFileName = UUID.randomUUID() + extension;
-        Path targetPath = storageDirectory.resolve(storedFileName);
 
         try {
-            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+            return new StoredImage(file.getBytes(), contentType);
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to store profile image", e);
+            throw new IllegalStateException("Unable to read profile image.", e);
         }
-
-        return "/uploads/profile-images/" + storedFileName;
     }
 }

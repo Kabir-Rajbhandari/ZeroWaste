@@ -5,9 +5,6 @@ import { colors, fonts } from "../../theme";
 import { authApi } from "../../services/api";
 import { setUserEmailCookie } from "../../utils/auth";
 
-const SPRING_BOOT_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-
 const cardStyle = {
   maxWidth: 1350,
   minHeight: "min(860px, calc(100vh - 3rem))",
@@ -39,10 +36,10 @@ const bodyTextStyle = {
 };
 
 export default function Login({ onNavigate }) {
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    rememberMe: false,
+  const [form, setForm] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email");
+    return { email: email || "", password: "", rememberMe: false };
   });
   const [loginStage, setLoginStage] = useState("credentials");
   const [pendingEmail, setPendingEmail] = useState("");
@@ -54,6 +51,17 @@ export default function Login({ onNavigate }) {
   const [errMsg, setErrMsg] = useState("");
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resendStatus, setResendStatus] = useState("idle");
+
+  const [verifyToast, setVerifyToast] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("zw_verify_toast");
+      if (!raw) return null;
+      sessionStorage.removeItem("zw_verify_toast");
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -77,11 +85,43 @@ export default function Login({ onNavigate }) {
   };
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const email = params.get("email");
-    if (email) {
-      setForm((prev) => ({ ...prev, email }));
+    if (!verifyToast) return;
+    const timer = setTimeout(() => setVerifyToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [verifyToast]);
+
+  // CHANGED: listen for a verification success broadcast from another tab
+  // (the one the user's email link opened). If this tab is currently
+  // stuck showing "please verify your email," clear that state and let
+  // the user know they can log in now — no manual tab-switching needed.
+  useEffect(() => {
+    function handleVerifiedBroadcast(e) {
+      if (e.key !== "zw_email_verified_broadcast" || !e.newValue) return;
+
+      let payload;
+      try {
+        payload = JSON.parse(e.newValue);
+      } catch {
+        return;
+      }
+      if (!payload?.success) return;
+
+      // Only act if this tab is actually waiting on a verification —
+      // otherwise a broadcast meant for a different tab/account could
+      // wrongly clear state here.
+      setNeedsVerification((wasWaiting) => {
+        if (!wasWaiting) return wasWaiting;
+        setResendStatus("idle");
+        setErrMsg("");
+        setInfoMsg(
+          "Your email was just verified in another tab — you can log in now.",
+        );
+        return false;
+      });
     }
+
+    window.addEventListener("storage", handleVerifiedBroadcast);
+    return () => window.removeEventListener("storage", handleVerifiedBroadcast);
   }, []);
 
   const saveAuth = (data) => {
@@ -187,6 +227,58 @@ export default function Login({ onNavigate }) {
       className="min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-5"
       style={{ background: colors.white }}
     >
+      {/* CHANGED: top-right toast for email verification result */}
+      {verifyToast && (
+        <div
+          role="alert"
+          className="d-flex align-items-start justify-content-between gap-3"
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            zIndex: 1080,
+            maxWidth: 360,
+            padding: "0.9rem 1.1rem",
+            borderRadius: 12,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+            background: verifyToast.success ? "#e9f7ef" : "#fdecea",
+            border: `1px solid ${verifyToast.success ? "#2f9e44" : "#d64545"}`,
+            color: verifyToast.success ? "#1b5e20" : "#7a1f1f",
+            ...bodyTextStyle,
+          }}
+        >
+          <div>
+            <p className="mb-1 fw-bold" style={{ fontSize: "0.9rem" }}>
+              {verifyToast.success
+                ? "Email Verified"
+                : "Verification Unsuccessful"}
+            </p>
+            <p className="mb-0" style={{ fontSize: "0.85rem" }}>
+              {verifyToast.message ||
+                (verifyToast.success
+                  ? "Your email has been verified. You can now log in."
+                  : "We couldn't verify your email. Please try again.")}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setVerifyToast(null)}
+            style={{
+              background: "none",
+              border: "none",
+              lineHeight: 1,
+              fontSize: "1.1rem",
+              color: "inherit",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div
         className="login-card row g-0 w-100"
         style={{

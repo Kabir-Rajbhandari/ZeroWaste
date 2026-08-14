@@ -1,20 +1,22 @@
 package com.zerowaste.zerowaste.service;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
 import com.zerowaste.zerowaste.model.FoodItem;
 import com.zerowaste.zerowaste.model.Notification;
 import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.FoodItemRepository;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
+import jakarta.annotation.PostConstruct;
 
 /**
  * Scans food items daily and creates an "Alerts" notification for any item

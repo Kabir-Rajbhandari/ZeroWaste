@@ -1,9 +1,24 @@
-const STORAGE_KEY = "zerowaste_activity_log";
+import { getStoredUser } from "./auth";
+
+const STORAGE_PREFIX = "zerowaste_activity_log";
 const MAX_ENTRIES = 20;
+
+/**
+ * Activity entries are scoped per logged-in user id, not to a single global
+ * key. Without this, everyone sharing a browser/device would see each
+ * other's "Added Milk" / "Donated Bread" entries in their own dashboard,
+ * since a plain localStorage key persists across logins. Falls back to an
+ * "anonymous" bucket only if somehow called with nobody logged in.
+ */
+function getStorageKey() {
+  const user = getStoredUser();
+  const userId = user?.id ?? "anonymous";
+  return `${STORAGE_PREFIX}:${userId}`;
+}
 
 function readLog() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey());
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -13,7 +28,7 @@ function readLog() {
 
 function writeLog(entries) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    localStorage.setItem(getStorageKey(), JSON.stringify(entries));
   } catch {
     // localStorage unavailable (private mode, quota, etc.) — fail silently
   }
@@ -58,6 +73,20 @@ export function getRecentActivity(limit = 4) {
   return readLog()
     .slice(0, limit)
     .map((entry) => ({ ...entry, time: formatActivityTime(entry.timestamp) }));
+}
+
+/**
+ * Wipes the *current* user's locally-cached activity entries. Call this on
+ * logout so nothing lingers in localStorage for the next person who logs
+ * into this browser to accidentally see (belt-and-braces on top of the
+ * per-user storage key above).
+ */
+export function clearActivityLog() {
+  try {
+    localStorage.removeItem(getStorageKey());
+  } catch {
+    // ignore
+  }
 }
 
 export function formatActivityTime(isoString) {

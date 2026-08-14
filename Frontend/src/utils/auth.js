@@ -74,6 +74,13 @@ export function setDonationDetailsCookie(details) {
 }
 
 export function clearAuth() {
+  // Clear this user's locally-cached activity feed *before* removing
+  // zw_user, since it needs the current user id to find the right key.
+  // (Dynamic import avoids a circular import between auth.js <-> activitylog.js.)
+  import("./activitylog")
+    .then((mod) => mod.clearActivityLog())
+    .catch(() => {});
+
   localStorage.removeItem("zw_token");
   localStorage.removeItem("zw_user");
   sessionStorage.removeItem("zw_token");

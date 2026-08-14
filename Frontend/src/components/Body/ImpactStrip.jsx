@@ -1,26 +1,24 @@
 import { useEffect, useState } from "react";
 import { colors } from "../../theme";
 import { analyticsApi } from "../../services/api";
+import { useCountUp, formatNumber } from "../../utils/useCountUp";
 
 export default function ImpactStrip() {
   const [impact, setImpact] = useState(null);
-  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [summaryData, impactData] = await Promise.all([
-          analyticsApi.getSummary("month"),
-          analyticsApi.getCommunityImpact(),
-        ]);
+        // Public, sitewide numbers aggregated across every user in the
+        // database — the same source Hero.jsx uses, so both places on the
+        // homepage always agree with each other and with the DB.
+        const impactData = await analyticsApi.getCommunityImpact();
         if (!cancelled) {
-          setSummary(summaryData);
           setImpact(impactData);
         }
       } catch {
         if (!cancelled) {
-          setSummary(null);
           setImpact({
             foodSavedCount: 0,
             activeHouseholds: 0,
@@ -34,21 +32,35 @@ export default function ImpactStrip() {
     };
   }, []);
 
-  const formatCount = (value) =>
-    new Intl.NumberFormat("en-US").format(value ?? 0);
+  // Animate the numbers
+  const foodSavedCount = useCountUp(
+    impact?.foodSavedCount ?? 0,
+    2000,
+    !!impact,
+  );
+  const activeHouseholdsCount = useCountUp(
+    impact?.activeHouseholds ?? 0,
+    2000,
+    !!impact,
+  );
+  const mealsSharedCount = useCountUp(
+    impact?.mealsSharedCount ?? 0,
+    2000,
+    !!impact,
+  );
 
   const stats = [
     {
-      num: `${formatCount(summary?.foodSavedCount ?? impact?.foodSavedCount ?? 0)}+`,
+      num: `${formatNumber(foodSavedCount)}+`,
       label: "food saved from waste in our community",
     },
     {
-      num: `${formatCount(impact?.activeHouseholds ?? 0)}+`,
+      num: `${formatNumber(activeHouseholdsCount)}+`,
       label: "households actively reducing food waste",
     },
     {
-      num: `${formatCount(impact?.mealsSharedCount ?? 0)}+`,
-      label: "meals shared using ZeroWaste inventory",
+      num: `${formatNumber(mealsSharedCount)}+`,
+      label: "meals planned using ZeroWaste inventory",
     },
   ];
   return (
@@ -84,6 +96,38 @@ export default function ImpactStrip() {
             z-index:0;
             pointer-events: none;
           }
+
+          @keyframes slideInUp {
+            from {
+              opacity: 0;
+              transform: translateY(30px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .impact-card {
+            animation: slideInUp 0.6s ease-out backwards;
+          }
+
+          .impact-card:nth-child(1) {
+            animation-delay: 0.1s;
+          }
+
+          .impact-card:nth-child(2) {
+            animation-delay: 0.2s;
+          }
+
+          .impact-card:nth-child(3) {
+            animation-delay: 0.3s;
+          }
+
+          .impact-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 24px rgba(62, 160, 102, 0.2) !important;
+          }
         `}
       </style>
       <div className="container" style={{ maxWidth: "1180px" }}>
@@ -91,13 +135,15 @@ export default function ImpactStrip() {
           {stats.map((s) => (
             <div key={s.label} className="col-lg-4">
               <div
-                className="text-center h-100"
+                className="text-center h-100 impact-card"
                 style={{
                   cursor: "default",
                   background: colors.showcase_green,
                   borderRadius: 6,
                   padding: "2.5rem 1.5rem",
                   boxShadow: "0 0px 5px rgb(169, 169, 169)",
+                  transition:
+                    "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
                 }}
               >
                 <div

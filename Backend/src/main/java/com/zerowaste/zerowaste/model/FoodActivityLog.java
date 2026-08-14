@@ -39,7 +39,7 @@ public class FoodActivityLog {
     @Column(nullable = false)
     private Long userId;
 
-    // USED, DONATED, WASTED
+    // ADDED, UPDATED, USED, DONATED, WASTED, REMOVED, REQUESTED
     @Column(nullable = false)
     private String type;
 
@@ -47,6 +47,11 @@ public class FoodActivityLog {
     // Fruits, Vegetable), so charts can break totals down by category even
     // after the original FoodItem row is gone.
     private String category;
+
+    // Snapshot of the item's name at the time of the event, so the Recent
+    // Activity feed can say "Added Milk" instead of just "Added an item" —
+    // kept even after the FoodItem row itself is gone (deleted/transferred).
+    private String itemName;
 
     private Double quantity;
 

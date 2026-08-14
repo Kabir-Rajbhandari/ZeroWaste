@@ -30,10 +30,10 @@ export default function Hero() {
 
     (async () => {
       try {
-        const [summary, impact] = await Promise.all([
-          analyticsApi.getSummary("month"),
-          analyticsApi.getCommunityImpact(),
-        ]);
+        // Public, sitewide numbers aggregated across every user in the
+        // database — this is the only source for the homepage stats, since
+        // it's the one analytics endpoint that doesn't require login.
+        const impact = await analyticsApi.getCommunityImpact();
 
         if (cancelled) return;
 
@@ -41,7 +41,7 @@ export default function Hero() {
           {
             icon: Recycle,
             label: "Food Saved",
-            value: `${formatCount(summary?.foodSavedCount ?? impact?.foodSavedCount ?? 0)}+`,
+            value: `${formatCount(impact?.foodSavedCount ?? 0)}+`,
           },
           {
             icon: Users,

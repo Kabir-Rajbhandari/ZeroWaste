@@ -1,11 +1,15 @@
 package com.zerowaste.zerowaste.controller;
 
+import java.time.Duration;
 import java.util.Map;
 
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,12 +24,13 @@ import com.zerowaste.zerowaste.dto.UpdateProfileRequest;
 import com.zerowaste.zerowaste.dto.UserResponse;
 import com.zerowaste.zerowaste.dto.VerifyOtpRequest;
 import com.zerowaste.zerowaste.service.ProfileImageStorageService;
+import com.zerowaste.zerowaste.service.ProfileImageStorageService.StoredImage;
 import com.zerowaste.zerowaste.service.TwoFactorService;
 import com.zerowaste.zerowaste.service.UserService;
+
 import jakarta.validation.Valid;
 
 // Import Map for returning JSON responses
-
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -60,8 +65,28 @@ public class UserController {
     public UserResponse uploadProfileImage(
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal Long userId) {
-        String imageUrl = profileImageStorageService.storeProfileImage(file);
-        return userService.updateProfileImage(userId, imageUrl);
+        // Read + validate the upload, then store the bytes straight in the DB
+        // (User.profileImageData) instead of writing them to local disk.
+        StoredImage image = profileImageStorageService.readProfileImage(file);
+        return userService.updateProfileImage(userId, image.data(), image.contentType());
+    }
+
+    /**
+     * Serves a user's profile picture straight from the database. Public (no
+     * auth) because <img src> tags can't send an Authorization header — this
+     * mirrors the old behavior where /uploads/profile-images/** was served as a
+     * public static resource.
+     */
+    @GetMapping("/{id}/profile-image")
+    public ResponseEntity<byte[]> getProfileImage(@PathVariable Long id) {
+        StoredImage image = userService.getProfileImageBytes(id);
+        if (image == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .cacheControl(CacheControl.maxAge(Duration.ofHours(1)))
+                .body(image.data());
     }
 
     @PutMapping("/me/privacy")
@@ -71,10 +96,8 @@ public class UserController {
         return userService.updatePrivacy(userId, request);
     }
 
-
     // Mapping for changing password
     // ── 2FA endpoints ────────────────────────────────────────────────────────
-    
     /**
      * POST /api/users/me/two-factor/initiate Triggers OTP generation and sends
      * the verification email. Call this when the user toggles 2FA ON in

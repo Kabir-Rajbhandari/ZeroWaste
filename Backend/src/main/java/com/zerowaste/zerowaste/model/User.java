@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,6 +39,20 @@ public class User {
 
     @Column(name = "profile_image_url", length = 2048)
     private String profileImageUrl;
+
+    /**
+     * The actual image bytes, persisted in the database instead of the local
+     * filesystem so profile pictures survive redeploys/restarts and work
+     * across multiple app instances. Served back out via
+     * GET /api/users/{id}/profile-image.
+     */
+    @Lob
+    @Column(name = "profile_image_data")
+    private byte[] profileImageData;
+
+    /** MIME type of profileImageData (e.g. "image/png"), needed to serve it back correctly. */
+    @Column(name = "profile_image_content_type", length = 100)
+    private String profileImageContentType;
 
     @Column(nullable = false)
     @Builder.Default

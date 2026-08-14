@@ -23,15 +23,18 @@ public class DonationRequestService {
     private final UserRepository userRepository;
     private final DonationClaimRequestRepository claimRequestRepository;
     private final NotificationRepository notificationRepository;
+    private final ActivityLogService activityLogService;
 
     public DonationRequestService(FoodItemRepository foodItemRepository,
             UserRepository userRepository,
             DonationClaimRequestRepository claimRequestRepository,
-            NotificationRepository notificationRepository) {
+            NotificationRepository notificationRepository,
+            ActivityLogService activityLogService) {
         this.foodItemRepository = foodItemRepository;
         this.userRepository = userRepository;
         this.claimRequestRepository = claimRequestRepository;
         this.notificationRepository = notificationRepository;
+        this.activityLogService = activityLogService;
     }
 
     /**
@@ -90,6 +93,10 @@ public class DonationRequestService {
                 .itemName(item.getName())
                 .build();
         notificationRepository.save(newNotification);
+
+        // Log against the REQUESTER's own feed — "Requested Bread" — not the
+        // donor's, since this is the requester's action.
+        activityLogService.record(requesterId, "REQUESTED", item.getCategory(), item.getName(), item.getQuantity());
     }
 
     /**

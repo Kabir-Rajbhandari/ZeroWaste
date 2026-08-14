@@ -1,6 +1,4 @@
-// src/components/Auth/Signup.jsx  —  CHANGED: "terms & privacy policy" link now navigates correctly
-// Only the anchor near "By signing up you agree to our…" was changed.
-// Everything else is identical to the original.
+// src/components/Auth/Signup.jsx
 import { useState, useEffect } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { colors, fonts } from "../../theme";
@@ -8,7 +6,7 @@ import { colors, fonts } from "../../theme";
 const SPRING_BOOT_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
-const INITIAL = {
+const INITIAL_FORM_STATE = {
   fullName: "",
   email: "",
   password: "",
@@ -46,7 +44,7 @@ const bodyTextStyle = {
 };
 
 export default function Signup({ onNavigate }) {
-  const [form, setForm] = useState(INITIAL);
+  const [form, setForm] = useState(INITIAL_FORM_STATE);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [status, setStatus] = useState("idle");
@@ -54,37 +52,75 @@ export default function Signup({ onNavigate }) {
   const [errMsg, setErrMsg] = useState("");
 
   // ── Email verification link handling ──────────────────────────────────
-  // If this page was opened via the link in the verification email
-  // (?token=...), we show a verification status card instead of the
-  // signup form.
-  const [verifyToken, setVerifyToken] = useState(
-    () => new URLSearchParams(window.location.search).get("token"),
+  const [verifyToken, setVerifyToken] = useState(() =>
+    new URLSearchParams(window.location.search).get("token"),
   );
-  const [verifyStatus, setVerifyStatus] = useState(verifyToken ? "loading" : "idle");
+  const [verifyStatus, setVerifyStatus] = useState(
+    verifyToken ? "loading" : "idle",
+  );
   const [verifyMessage, setVerifyMessage] = useState("");
 
   useEffect(() => {
     if (!verifyToken) return;
 
-    fetch(`${SPRING_BOOT_URL}/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`, {
-      method: "POST",
-    })
+    let isMounted = true;
+
+    fetch(
+      `${SPRING_BOOT_URL}/api/auth/verify-email?token=${encodeURIComponent(
+        verifyToken,
+      )}`,
+      { method: "POST" },
+    )
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.message || "Verification failed. Please try again.");
+          throw new Error(
+            data.message || "Verification failed. Please try again.",
+          );
         }
-        setVerifyStatus("success");
-        setVerifyMessage(data.message || "Your email has been verified! You can now log in.");
+        if (isMounted) {
+          setVerifyStatus("success");
+          setVerifyMessage(
+            data.message || "Your email has been verified! You can now log in.",
+          );
+        }
+
+        // CHANGED: tell any other open tab (e.g. a Login tab that's sitting
+        // there waiting) that a verification just succeeded. The `storage`
+        // event only fires in OTHER tabs, never this one — which is exactly
+        // what we want, since this tab already shows its own success card.
+        try {
+          localStorage.setItem(
+            "zw_email_verified_broadcast",
+            JSON.stringify({ success: true, at: Date.now() }),
+          );
+        } catch {
+          // localStorage unavailable — cross-tab sync just won't fire,
+          // verification itself still succeeded fine
+        }
       })
       .catch((err) => {
-        setVerifyStatus("error");
-        setVerifyMessage(err.message || "This verification link is invalid or has expired.");
+        if (isMounted) {
+          setVerifyStatus("error");
+          setVerifyMessage(
+            err.message || "This verification link is invalid or has expired.",
+          );
+        }
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, [verifyToken]);
 
-  const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    // Clear field-specific error as user types
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: null }));
+    }
+  };
 
   const validate = () => {
     const errors = {};
@@ -111,15 +147,17 @@ export default function Signup({ onNavigate }) {
     setFieldErrors({});
     setStatus("loading");
     setErrMsg("");
+
     try {
       const res = await fetch(`${SPRING_BOOT_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: form.fullName,
-          email: form.email,
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
           password: form.password,
-          householdSize: form.householdSize === "" ? null : Number(form.householdSize),
+          householdSize:
+            form.householdSize === "" ? null : Number(form.householdSize),
         }),
       });
 
@@ -130,9 +168,8 @@ export default function Signup({ onNavigate }) {
         );
       }
 
-      const data = await res.json();
-
-      setForm(INITIAL);
+      setForm({ ...INITIAL_FORM_STATE });
+      setStatus("idle");
       onNavigate?.("login");
     } catch (err) {
       setErrMsg(err.message || "Something went wrong. Please try again.");
@@ -140,6 +177,7 @@ export default function Signup({ onNavigate }) {
     }
   };
 
+  // Verification Screen
   if (verifyToken) {
     const isLoading = verifyStatus === "loading";
     const isSuccess = verifyStatus === "success";
@@ -169,7 +207,7 @@ export default function Signup({ onNavigate }) {
             />
           </div>
 
-          {isLoading && (
+          {isLoading ? (
             <>
               <div
                 className="spinner-border mb-3"
@@ -182,9 +220,7 @@ export default function Signup({ onNavigate }) {
                 Verifying your email address…
               </p>
             </>
-          )}
-
-          {!isLoading && (
+          ) : (
             <>
               <h1
                 className="fw-bold mb-3"
@@ -212,10 +248,18 @@ export default function Signup({ onNavigate }) {
                   fontWeight: 600,
                 }}
                 onClick={() => {
-                  // Drop the ?token=... from the URL and clear local verify
-                  // state — otherwise this same card just re-renders since
-                  // navigating to "signup" while already on /signup is a no-op
-                  // for the router (same path, same component instance).
+                  try {
+                    sessionStorage.setItem(
+                      "zw_verify_toast",
+                      JSON.stringify({
+                        success: isSuccess,
+                        message: verifyMessage,
+                      }),
+                    );
+                  } catch {
+                    // Ignore storage error
+                  }
+
                   window.history.replaceState({}, "", "/signup");
                   setVerifyToken(null);
                   setVerifyStatus("idle");
@@ -232,6 +276,7 @@ export default function Signup({ onNavigate }) {
     );
   }
 
+  // Registration Form Screen
   return (
     <div
       className="min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-5"
@@ -241,7 +286,6 @@ export default function Signup({ onNavigate }) {
         className="signup-card row g-0 w-100"
         style={{
           ...cardStyle,
-          minHeight: "min(860px, calc(100vh - 3rem))",
           background: "transparent",
         }}
       >
@@ -262,32 +306,28 @@ export default function Signup({ onNavigate }) {
             background: ${colors.greenD};
             transition: width 0.25s ease;
           }
-
           .back-to-home:hover::before,
           .back-to-home:hover::after {
             width: 100%;
           }
-
           .signup-btn {
             opacity: 0.75;
             transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
           }
-
           .signup-btn:hover:not(:disabled) {
             opacity: 1 !important;
             transform: translateY(-1px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
-
-          .login-btn:hover{
+          .login-btn:hover {
             border-bottom: 1px solid ${colors.greenD};
           }
         `}</style>
+
+        {/* Form panel */}
         <div
-          className="col-12 col-lg-6 order-lg-1 d-flex align-items-center justify-content-center px-4 px-xl-5 py-4 py-xl-5 border-end border-2 h-100"
-          style={{
-            background: colors.authGreen,
-          }}
+          className="col-12 col-lg-6 order-lg-1 d-flex align-items-center justify-content-center px-4 px-xl-5 py-4 py-xl-5 border-end border-2"
+          style={{ background: colors.authGreen }}
         >
           <div className="mx-auto" style={{ maxWidth: 400, width: "100%" }}>
             <button
@@ -338,6 +378,7 @@ export default function Signup({ onNavigate }) {
                 <div
                   className="alert alert-danger py-2 mb-0"
                   style={{ fontSize: "0.9rem" }}
+                  role="alert"
                 >
                   {errMsg}
                 </div>
@@ -355,7 +396,9 @@ export default function Signup({ onNavigate }) {
                   id="fullName"
                   name="fullName"
                   type="text"
-                  className="form-control signup-input rounded-3"
+                  className={`form-control signup-input rounded-3 ${
+                    fieldErrors.fullName ? "is-invalid" : ""
+                  }`}
                   placeholder="John Doe"
                   style={inputStyle}
                   value={form.fullName}
@@ -363,7 +406,7 @@ export default function Signup({ onNavigate }) {
                   required
                 />
                 {fieldErrors.fullName && (
-                  <p className="text-danger small mt-2 mb-0">
+                  <p className="text-danger small mt-1 mb-0">
                     {fieldErrors.fullName}
                   </p>
                 )}
@@ -381,7 +424,9 @@ export default function Signup({ onNavigate }) {
                   id="email"
                   name="email"
                   type="email"
-                  className="form-control signup-input rounded-3"
+                  className={`form-control signup-input rounded-3 ${
+                    fieldErrors.email ? "is-invalid" : ""
+                  }`}
                   placeholder="someone@gmail.com"
                   style={inputStyle}
                   value={form.email}
@@ -389,7 +434,7 @@ export default function Signup({ onNavigate }) {
                   required
                 />
                 {fieldErrors.email && (
-                  <p className="text-danger small mt-2 mb-0">
+                  <p className="text-danger small mt-1 mb-0">
                     {fieldErrors.email}
                   </p>
                 )}
@@ -414,7 +459,7 @@ export default function Signup({ onNavigate }) {
                   value={form.householdSize}
                   onChange={handleChange}
                 />
-                <p className="text-muted small mt-2 mb-0">
+                <p className="text-muted small mt-1 mb-0">
                   Leave blank if you prefer not to share it.
                 </p>
               </div>
@@ -432,7 +477,9 @@ export default function Signup({ onNavigate }) {
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
-                    className="form-control signup-input rounded-3 pe-5"
+                    className={`form-control signup-input rounded-3 pe-5 ${
+                      fieldErrors.password ? "is-invalid" : ""
+                    }`}
                     style={inputStyle}
                     value={form.password}
                     onChange={handleChange}
@@ -450,7 +497,7 @@ export default function Signup({ onNavigate }) {
                   </button>
                 </div>
                 {fieldErrors.password && (
-                  <p className="text-danger small mt-2 mb-0">
+                  <p className="text-danger small mt-1 mb-0">
                     {fieldErrors.password}
                   </p>
                 )}
@@ -469,7 +516,9 @@ export default function Signup({ onNavigate }) {
                     id="confirmPassword"
                     name="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
-                    className="form-control signup-input rounded-3 pe-5"
+                    className={`form-control signup-input rounded-3 pe-5 ${
+                      fieldErrors.confirmPassword ? "is-invalid" : ""
+                    }`}
                     style={inputStyle}
                     value={form.confirmPassword}
                     onChange={handleChange}
@@ -491,7 +540,7 @@ export default function Signup({ onNavigate }) {
                   </button>
                 </div>
                 {fieldErrors.confirmPassword && (
-                  <p className="text-danger small mt-2 mb-0">
+                  <p className="text-danger small mt-1 mb-0">
                     {fieldErrors.confirmPassword}
                   </p>
                 )}
@@ -504,20 +553,16 @@ export default function Signup({ onNavigate }) {
                   ...bodyTextStyle,
                   marginTop: "0.5rem",
                   height: "3.5rem",
-                  opacity: "0.75",
                   background: colors.greenL,
                   fontSize: "0.95rem",
                   letterSpacing: "0.08em",
                   fontWeight: 600,
-                  transition:
-                    "background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease",
                 }}
                 disabled={status === "loading"}
               >
-                Register
+                {status === "loading" ? "Registering…" : "Register"}
               </button>
 
-              {/* ── CHANGED: was <a href="#">, now two separate nav buttons ── */}
               <p
                 className="text-center text-dark mb-0"
                 style={{ fontSize: "0.95rem" }}
@@ -558,7 +603,6 @@ export default function Signup({ onNavigate }) {
                 </button>
                 .
               </p>
-              {/* ── END CHANGE ── */}
             </form>
 
             <p
@@ -591,7 +635,6 @@ export default function Signup({ onNavigate }) {
           style={{
             background: colors.authGreen,
             borderLeft: `2px solid ${colors.greenD}`,
-            minHeight: "100%",
           }}
         >
           <div>

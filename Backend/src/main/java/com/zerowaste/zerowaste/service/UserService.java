@@ -61,6 +61,33 @@ public class UserService {
         return UserResponse.from(userRepository.save(user));
     }
 
+    /**
+     * Persists an uploaded profile picture's bytes directly in the database
+     * (User.profileImageData) instead of the local filesystem, and points
+     * profileImageUrl at the endpoint that serves those bytes back out.
+     */
+    public UserResponse updateProfileImage(Long userId, byte[] imageData, String contentType) {
+        User user = findUser(userId);
+        user.setProfileImageData(imageData);
+        user.setProfileImageContentType(contentType);
+        user.setProfileImageUrl("/api/users/" + userId + "/profile-image");
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    /**
+     * Fetches the stored profile-image bytes for the given user, if any.
+     * Returns null when the user has no image on file (never uploaded one,
+     * or their only profileImageUrl is an external link they typed in).
+     */
+    public ProfileImageStorageService.StoredImage getProfileImageBytes(Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null || user.getProfileImageData() == null || user.getProfileImageData().length == 0) {
+            return null;
+        }
+        return new ProfileImageStorageService.StoredImage(
+                user.getProfileImageData(), user.getProfileImageContentType());
+    }
+
     public UserResponse updatePrivacy(Long userId, PrivacyRequest request) {
         User user = findUser(userId);
         user.setDonationPublic(request.getDonationPublic());

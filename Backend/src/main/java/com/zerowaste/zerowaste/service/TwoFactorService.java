@@ -6,8 +6,6 @@ import java.time.temporal.ChronoUnit;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import com.zerowaste.zerowaste.dto.UserResponse;
@@ -16,8 +14,6 @@ import com.zerowaste.zerowaste.model.Notification;
 import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
-
-import jakarta.mail.internet.MimeMessage;
 
 /**
  * Handles the 2FA enable/disable flow:
@@ -32,10 +28,7 @@ public class TwoFactorService {
 
     private final UserRepository userRepository;
     private final NotificationRepository notificationRepository;
-    private final JavaMailSender mailSender;
-
-    @Value("${app.mail.from}")
-    private String mailFrom;
+    private final OtpEmailService otpEmailService;
 
     @Value("${app.2fa.otp-expiry-minutes:10}")
     private int otpExpiryMinutes;
@@ -44,10 +37,10 @@ public class TwoFactorService {
 
     public TwoFactorService(UserRepository userRepository,
             NotificationRepository notificationRepository,
-            JavaMailSender mailSender) {
+            OtpEmailService otpEmailService) {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
-        this.mailSender = mailSender;
+        this.otpEmailService = otpEmailService;
     }
 
     // ── Step 1: User toggles 2FA on → send OTP email ───────────────────────
@@ -70,7 +63,7 @@ public class TwoFactorService {
         user.setPendingTwoFactor(true);
         userRepository.save(user);
 
-        sendOtpEmail(user.getEmail(), user.getFullName(), otp);
+        otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
     // ── Step 2: User submits the code → activate 2FA ───────────────────────
@@ -129,7 +122,7 @@ public class TwoFactorService {
         user.setOtpExpiresAt(Instant.now().plus(otpExpiryMinutes, ChronoUnit.MINUTES));
         userRepository.save(user);
 
-        sendOtpEmail(user.getEmail(), user.getFullName(), otp);
+        otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
     // ── Login: User submits the login OTP → completes authentication ───────
@@ -183,7 +176,7 @@ public class TwoFactorService {
         user.setOtpExpiresAt(Instant.now().plus(otpExpiryMinutes, ChronoUnit.MINUTES));
         userRepository.save(user);
 
-        sendOtpEmail(user.getEmail(), user.getFullName(), otp);
+        otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
     // ── Disable: User toggles 2FA off (no OTP required) ────────────────────
@@ -247,100 +240,7 @@ public class TwoFactorService {
         notificationRepository.save(notification);
     }
 
-    // ── Email ────────────────────────────────────────────────────────────────
-    private void sendOtpEmail(String toEmail, String fullName, String otp) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(mailFrom);
-            helper.setTo(toEmail);
-            helper.setSubject("ZeroWaste — Your 2FA Verification Code");
-
-            String html = buildEmailHtml(fullName, otp);
-            helper.setText(html, true);
-
-            mailSender.send(message);
-        } catch (Exception ex) {
-            // Log but don't crash — the OTP is already saved; the user can request a resend.
-            System.err.println("[2FA] Failed to send OTP email to " + toEmail + ": " + ex.getMessage());
-            throw new ApiException(
-                    "We could not send the verification email. Please check your email address and try again.",
-                    HttpStatus.SERVICE_UNAVAILABLE);
-        }
-    }
-
-    private String buildEmailHtml(String fullName, String otp) {
-        return """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-                <body style="margin:0;padding:0;background:#f4f7f4;font-family:'Segoe UI',Arial,sans-serif;">
-                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f7f4;padding:40px 0;">
-                    <tr><td align="center">
-                      <table width="520" cellpadding="0" cellspacing="0"
-                             style="background:#ffffff;border-radius:12px;overflow:hidden;
-                                    box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-
-                        <!-- Header -->
-                        <tr>
-                          <td style="background:#3d6b35;padding:28px 40px;text-align:center;">
-                            <h1 style="margin:0;color:#ffffff;font-size:1.6rem;letter-spacing:1px;">
-                              ZeroWaste
-                            </h1>
-                          </td>
-                        </tr>
-
-                        <!-- Body -->
-                        <tr>
-                          <td style="padding:36px 40px;">
-                            <p style="margin:0 0 16px;color:#2d3a2d;font-size:1rem;">
-                              Hi <strong>%s</strong>,
-                            </p>
-                            <p style="margin:0 0 24px;color:#4a5a4a;font-size:0.95rem;line-height:1.6;">
-                              Welcome to ZeroWaste! You've requested to enable
-                              <strong>Two-Factor Authentication</strong> on your account.
-                              Use the code below to complete the setup:
-                            </p>
-
-                            <!-- OTP Box -->
-                            <div style="text-align:center;margin:0 0 28px;">
-                              <span style="display:inline-block;background:#edf5eb;border:2px dashed #3d6b35;
-                                           border-radius:10px;padding:18px 40px;
-                                           font-size:2.4rem;font-weight:700;
-                                           letter-spacing:12px;color:#2d6a2d;">
-                                %s
-                              </span>
-                            </div>
-
-                            <p style="margin:0 0 16px;color:#4a5a4a;font-size:0.9rem;line-height:1.6;">
-                              This OTP is valid for <strong>%d minutes</strong>.
-                              If you did not request this, you can safely ignore this email —
-                              your account remains unchanged.
-                            </p>
-                            <p style="margin:0;color:#4a5a4a;font-size:0.9rem;line-height:1.6;">
-                              If the code has expired, return to your Settings page and click
-                              <em>"Resend Code"</em> to get a new one.
-                            </p>
-                          </td>
-                        </tr>
-
-                        <!-- Footer -->
-                        <tr>
-                          <td style="background:#f4f7f4;padding:20px 40px;text-align:center;
-                                     border-top:1px solid #e0ebe0;">
-                            <p style="margin:0;color:#7a8a7a;font-size:0.78rem;">
-                              &copy; 2026 ZeroWaste - Smart Food Waste Management<br>
-                              This is an automated message - please do not reply.
-                            </p>
-                          </td>
-                        </tr>
-
-                      </table>
-                    </td></tr>
-                  </table>
-                </body>
-                </html>
-                """.formatted(fullName, otp, otpExpiryMinutes);
-    }
+    // Email sending itself now lives in OtpEmailService (see its class
+    // Javadoc for why it had to be a separate bean rather than a method
+    // here).
 }

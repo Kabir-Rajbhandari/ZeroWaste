@@ -242,33 +242,60 @@ export const notificationApi = {
     return request(`/api/notifications/${id}/decline`, { method: "POST" });
   },
 };
+function withCategoryParam(params, category) {
+  if (category && category !== "All") {
+    params.set("category", category);
+  }
+  return params;
+}
+
+function withRangeParams(params, range) {
+  if (range?.startDate) params.set("startDate", range.startDate);
+  if (range?.endDate) params.set("endDate", range.endDate);
+  return params;
+}
+
 export const analyticsApi = {
-  getSummary(period) {
+  getSummary(period, category, range) {
+    const params = withRangeParams(
+      withCategoryParam(new URLSearchParams({ period }), category),
+      range,
+    );
+    return request(`/api/analytics/summary?${params.toString()}`, {
+      method: "GET",
+    });
+  },
+
+  getInventoryOverview(category) {
+    const params = withCategoryParam(new URLSearchParams(), category);
+    const qs = params.toString();
     return request(
-      `/api/analytics/summary?period=${encodeURIComponent(period)}`,
+      `/api/analytics/inventory-overview${qs ? `?${qs}` : ""}`,
       { method: "GET" },
     );
   },
 
-  getInventoryOverview() {
-    return request("/api/analytics/inventory-overview", { method: "GET" });
-  },
-
-  getFoodSavedBreakdown(period) {
-    return request(
-      `/api/analytics/food-saved-breakdown?period=${encodeURIComponent(period)}`,
-      { method: "GET" },
+  getFoodSavedBreakdown(period, category, range) {
+    const params = withRangeParams(
+      withCategoryParam(new URLSearchParams({ period }), category),
+      range,
     );
+    return request(`/api/analytics/food-saved-breakdown?${params.toString()}`, {
+      method: "GET",
+    });
   },
 
   getCommunityImpact() {
     return request("/api/analytics/community-impact", { method: "GET" });
   },
 
-  getWasteBreakdown(period) {
-    return request(
-      `/api/analytics/waste-breakdown?period=${encodeURIComponent(period)}`,
-      { method: "GET" },
+  getWasteBreakdown(period, category, range) {
+    const params = withRangeParams(
+      withCategoryParam(new URLSearchParams({ period }), category),
+      range,
     );
+    return request(`/api/analytics/waste-breakdown?${params.toString()}`, {
+      method: "GET",
+    });
   },
 };

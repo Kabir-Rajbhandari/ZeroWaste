@@ -37,17 +37,20 @@ public class FoodItemService {
     private final DonationClaimRequestRepository claimRequestRepository;
     private final NotificationRepository notificationRepository;
     private final FoodActivityLogRepository activityLogRepository;
+    private final ActivityLogService activityLogService;
 
     public FoodItemService(FoodItemRepository foodItemRepository,
             UserRepository userRepository,
             DonationClaimRequestRepository claimRequestRepository,
             NotificationRepository notificationRepository,
-            FoodActivityLogRepository activityLogRepository) {
+            FoodActivityLogRepository activityLogRepository,
+            ActivityLogService activityLogService) {
         this.foodItemRepository = foodItemRepository;
         this.userRepository = userRepository;
         this.claimRequestRepository = claimRequestRepository;
         this.notificationRepository = notificationRepository;
         this.activityLogRepository = activityLogRepository;
+        this.activityLogService = activityLogService;
     }
 
     public List<FoodItemResponse> getAllForUser(Long userId) {
@@ -121,6 +124,8 @@ public class FoodItemService {
                 .build();
 
         FoodItem savedItem = foodItemRepository.save(item);
+        activityLogService.record(userId, "ADDED", savedItem.getCategory(), savedItem.getName(),
+                savedItem.getQuantity());
         return FoodItemResponse.from(savedItem);
     }
 
@@ -139,6 +144,8 @@ public class FoodItemService {
         item.setImageUrl(blankToNull(request.getImageUrl()));
 
         FoodItem savedItem = foodItemRepository.save(item);
+        activityLogService.record(userId, "UPDATED", savedItem.getCategory(), savedItem.getName(),
+                savedItem.getQuantity());
         return FoodItemResponse.from(savedItem);
     }
 
@@ -160,6 +167,7 @@ public class FoodItemService {
                 .userId(userId)
                 .type("DONATED")
                 .category(saved.getCategory())
+                .itemName(saved.getName())
                 .quantity(saved.getQuantity())
                 .build();
         activityLogRepository.save(activityLog);
@@ -186,6 +194,7 @@ public class FoodItemService {
                 .userId(userId)
                 .type("USED")
                 .category(item.getCategory())
+                .itemName(item.getName())
                 .quantity(item.getQuantity())
                 .build();
         activityLogRepository.save(activityLog);
@@ -248,8 +257,13 @@ public class FoodItemService {
                     .userId(userId)
                     .type("WASTED")
                     .category(item.getCategory())
+                    .itemName(item.getName())
                     .quantity(item.getQuantity())
                     .build());
+        } else {
+            // Manually removing an item that hadn't expired yet isn't waste —
+            // still worth a feed entry so "Deleted X" shows up for the user.
+            activityLogService.record(userId, "REMOVED", item.getCategory(), item.getName(), item.getQuantity());
         }
 
         foodItemRepository.delete(item);

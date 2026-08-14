@@ -267,11 +267,11 @@ export default function ExpiryAlerts() {
                       </td>
                       <td className="py-3">
                         <span
-                          className="px-3 py-1 rounded-2"
+                          className="px-3 py-2 rounded-5"
                           style={{
                             background: isExpired ? "#BA5A5A" : colors.greenL,
                             color: colors.white,
-                            boxShadow: "0 0px 5px rgb(169, 169, 169)",
+                            boxShadow: "0 0px 2px rgb(69, 68, 68)",
                             fontSize: "0.85rem",
                             fontWeight: 500,
                             display: "inline-block",
@@ -281,23 +281,37 @@ export default function ExpiryAlerts() {
                         </span>
                       </td>
                       <td className="pe-4 py-3 text-end">
-                        <button
-                          type="button"
-                          className="btn btn-sm donate-btn"
-                          disabled={donatingId === item.id}
-                          onClick={() => setDonateTarget(item)}
-                          style={{
-                            ...btnPrimaryStyle,
-                            borderRadius: 4,
-                            fontWeight: 600,
-                            padding: "0.45rem 1.15rem",
-                            fontSize: "0.9rem",
-                            color: colors.white,
-                            transition: "all 0.5s ease",
-                          }}
-                        >
-                          Donate
-                        </button>
+                        {isExpired ? (
+                          <span
+                            style={{
+                              color: colors.muted,
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                              fontStyle: "italic",
+                              paddingRight: "0.5rem",
+                            }}
+                          >
+                            Cannot Donate
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm donate-btn"
+                            disabled={donatingId === item.id}
+                            onClick={() => setDonateTarget(item)}
+                            style={{
+                              ...btnPrimaryStyle,
+                              borderRadius: 4,
+                              fontWeight: 600,
+                              padding: "0.45rem 1.15rem",
+                              fontSize: "0.9rem",
+                              color: colors.white,
+                              transition: "all 0.5s ease",
+                            }}
+                          >
+                            Donate
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
