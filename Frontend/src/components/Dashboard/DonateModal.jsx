@@ -27,33 +27,37 @@ const labelStyle = {
 
 export default function DonateModal({ item, onCancel, onConfirm }) {
   const [user] = useState(() => getStoredUser());
-  const [savedDetails] = useState(() => getDonationDetailsCookie());
+  const [prevItemId, setPrevItemId] = useState(item?.id);
 
-  const [location, setLocation] = useState(savedDetails?.location || "");
-  const [availableTime, setAvailableTime] = useState(
-    savedDetails?.availableTime || "",
-  );
-  const [contactDetail, setContactDetail] = useState(
-    savedDetails?.contactDetail || "",
-  );
+  const [location, setLocation] = useState(() => {
+    const cookieDetails = getDonationDetailsCookie();
+    return cookieDetails?.location || user?.location || user?.address || "";
+  });
+  const [availableTime, setAvailableTime] = useState(() => {
+    const cookieDetails = getDonationDetailsCookie();
+    return cookieDetails?.availableTime || "";
+  });
+  const [contactDetail, setContactDetail] = useState(() => {
+    const cookieDetails = getDonationDetailsCookie();
+    return cookieDetails?.contactDetail || user?.phone || user?.contact || "";
+  });
   const [submitting, setSubmitting] = useState(false);
   const [errMsg, setErrMsg] = useState("");
 
-  useEffect(() => {
-    if (item) {
-      const cookieDetails = getDonationDetailsCookie();
-      setLocation(
-        cookieDetails?.location || user?.location || user?.address || "",
-      );
-      setAvailableTime(cookieDetails?.availableTime || "");
-      setContactDetail(
-        cookieDetails?.contactDetail || user?.phone || user?.contact || "",
-      );
-      setErrMsg("");
-      setSubmitting(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id]);
+  // Adjust state during render when item changes to avoid cascading useEffect renders
+  if (item && item.id !== prevItemId) {
+    setPrevItemId(item.id);
+    const cookieDetails = getDonationDetailsCookie();
+    setLocation(
+      cookieDetails?.location || user?.location || user?.address || "",
+    );
+    setAvailableTime(cookieDetails?.availableTime || "");
+    setContactDetail(
+      cookieDetails?.contactDetail || user?.phone || user?.contact || "",
+    );
+    setErrMsg("");
+    setSubmitting(false);
+  }
 
   useEffect(() => {
     if (!item) return;

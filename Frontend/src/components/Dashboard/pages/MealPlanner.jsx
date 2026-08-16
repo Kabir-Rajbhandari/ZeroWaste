@@ -12,19 +12,11 @@ import {
   Utensils,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
-import { foodApi } from "../../../services/api";
+import { foodApi, mealPlanApi } from "../../../services/api";
 import SuggestedMeals from "../SuggestedMeals";
 import { logActivity } from "../../../utils/activitylog";
-import { getStoredUser } from "../../../utils/auth";
 
 const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-const STORAGE_PREFIX = "zw_meal_planner";
-
-function getStorageKey() {
-  const user = getStoredUser();
-  const userId = user?.id ?? "anonymous";
-  return `${STORAGE_PREFIX}:${userId}`;
-}
 
 function getWeekStart(date) {
   const d = new Date(date);
@@ -50,18 +42,6 @@ function dayKey(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function loadMeals() {
-  try {
-    return JSON.parse(localStorage.getItem(getStorageKey()) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveMeals(meals) {
-  localStorage.setItem(getStorageKey(), JSON.stringify(meals));
 }
 
 const DAY_SHORT = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -91,11 +71,11 @@ function daysUntilExpiry(dateStr) {
 export default function MealPlanner() {
   const [viewMode, setViewMode] = useState("week");
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
-  const [meals, setMeals] = useState(loadMeals);
+  const [meals, setMeals] = useState({});
   const [inventoryItems, setInventoryItems] = useState([]);
   const [activeModal, setActiveModal] = useState(null);
   const [mealName, setMealName] = useState("");
-  const [linkedItem, setLinkedItem] = useState("");
+  const [linkedItemId, setLinkedItemId] = useState("");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -111,14 +91,16 @@ export default function MealPlanner() {
     1,
     Math.ceil(sortedInventory.length / INVENTORY_PAGE_SIZE),
   );
+  // Clamped directly during render instead of "fixed up" afterward via an
+  // effect + setState — if the list shrinks and inventoryPage is now out of
+  // range, this just computes the right page on the spot rather than
+  // rendering once with a stale page and then re-rendering after an effect
+  // corrects it.
+  const currentInventoryPage = Math.min(inventoryPage, inventoryTotalPages);
   const paginatedInventory = sortedInventory.slice(
-    (inventoryPage - 1) * INVENTORY_PAGE_SIZE,
-    inventoryPage * INVENTORY_PAGE_SIZE,
+    (currentInventoryPage - 1) * INVENTORY_PAGE_SIZE,
+    currentInventoryPage * INVENTORY_PAGE_SIZE,
   );
-
-  useEffect(() => {
-    if (inventoryPage > inventoryTotalPages) setInventoryPage(1);
-  }, [inventoryTotalPages, inventoryPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,6 +145,44 @@ export default function MealPlanner() {
     return days;
   }, [monthStart]);
 
+  // Union of every date currently on screen (week grid + month grid, whose
+  // ranges don't always coincide near a month boundary), so one fetch covers
+  // whichever view the user is looking at.
+  const visibleRange = useMemo(() => {
+    const candidates = [...weekDays, ...monthDays.filter(Boolean)];
+    const start = candidates.reduce((min, d) => (d < min ? d : min));
+    const end = candidates.reduce((max, d) => (d > max ? d : max));
+    return { start, end };
+  }, [weekDays, monthDays]);
+
+  const rangeStartKey = dayKey(visibleRange.start);
+  const rangeEndKey = dayKey(visibleRange.end);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await mealPlanApi.getRange(rangeStartKey, rangeEndKey);
+        if (cancelled) return;
+        const dict = {};
+        (Array.isArray(data) ? data : []).forEach((plan) => {
+          dict[`${plan.mealDate}_${plan.mealType}`] = {
+            name: plan.name || "",
+            linkedItem: plan.linkedFoodItemName || "",
+            linkedFoodItemId: plan.linkedFoodItemId || null,
+            planId: plan.id,
+          };
+        });
+        setMeals(dict);
+      } catch {
+        if (!cancelled) setMeals({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeStartKey, rangeEndKey]);
+
   const shownMonthYear =
     viewMode === "week"
       ? formatMonthYear(weekStart)
@@ -190,16 +210,21 @@ export default function MealPlanner() {
 
   const getMealData = (date, meal) => {
     const k = `${dayKey(date)}_${meal}`;
-    const raw = meals[k];
-    if (typeof raw === "object" && raw !== null) return raw;
-    return { name: raw || "", linkedItem: "" };
+    return (
+      meals[k] || {
+        name: "",
+        linkedItem: "",
+        linkedFoodItemId: null,
+        planId: null,
+      }
+    );
   };
 
   const openEditModal = (date, meal) => {
     const k = `${dayKey(date)}_${meal}`;
     const data = getMealData(date, meal);
     setMealName(data.name || "");
-    setLinkedItem(data.linkedItem || "");
+    setLinkedItemId(data.linkedFoodItemId ? String(data.linkedFoodItemId) : "");
     setActiveModal({
       key: k,
       date,
@@ -212,30 +237,70 @@ export default function MealPlanner() {
     });
   };
 
-  const saveMealModal = () => {
+  const saveMealModal = async () => {
     if (!activeModal) return;
-    const updated = {
-      ...meals,
-      [activeModal.key]: {
+    const parsedLinkedId = linkedItemId ? Number(linkedItemId) : null;
+    try {
+      const saved = await mealPlanApi.upsert({
+        mealDate: dayKey(activeModal.date),
+        mealType: activeModal.meal,
         name: mealName,
-        linkedItem,
-      },
-    };
-    setMeals(updated);
-    saveMeals(updated);
-    logActivity(`Planned meal: ${mealName || "Cleared slot"}`);
-    setActiveModal(null);
+        linkedFoodItemId: parsedLinkedId,
+      });
+
+      setMeals((prev) => {
+        const updated = { ...prev };
+        if (!saved?.id) {
+          delete updated[activeModal.key];
+        } else {
+          updated[activeModal.key] = {
+            name: saved.name || "",
+            linkedItem: saved.linkedFoodItemName || "",
+            linkedFoodItemId: saved.linkedFoodItemId || null,
+            planId: saved.id,
+          };
+        }
+        return updated;
+      });
+
+      // Reflect the new reservation on the inventory panel right away
+      // instead of waiting for the next full refetch.
+      if (parsedLinkedId) {
+        setInventoryItems((prev) =>
+          prev.map((item) =>
+            item.id === parsedLinkedId ? { ...item, reserved: true } : item,
+          ),
+        );
+      }
+
+      logActivity(`Planned meal: ${mealName || "Cleared slot"}`);
+      setActiveModal(null);
+    } catch (err) {
+      setStatusMessage(err.message || "Failed to save meal. Please try again.");
+      setTimeout(() => setStatusMessage(""), 4000);
+    }
   };
 
-  const deleteMealSlot = (key) => {
-    const updated = { ...meals };
-    delete updated[key];
-    setMeals(updated);
-    saveMeals(updated);
+  const deleteMealSlot = async (key) => {
+    const entry = meals[key];
+    setMeals((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+    if (entry?.planId) {
+      try {
+        await mealPlanApi.delete(entry.planId);
+      } catch (err) {
+        setStatusMessage(
+          err.message || "Failed to remove meal. Please try again.",
+        );
+        setTimeout(() => setStatusMessage(""), 4000);
+      }
+    }
   };
 
   const handleConfirmWeeklyPlan = () => {
-    saveMeals(meals);
     logActivity("Confirmed weekly meal plan & scheduled reminders");
     setStatusMessage(
       "Weekly plan saved successfully! Reserved inventory and scheduled meal reminders.",
@@ -397,7 +462,7 @@ export default function MealPlanner() {
                 type="button"
                 className="btn btn-sm d-flex align-items-center justify-content-center"
                 onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
-                disabled={inventoryPage === 1}
+                disabled={currentInventoryPage === 1}
                 style={{
                   width: 30,
                   height: 30,
@@ -405,7 +470,7 @@ export default function MealPlanner() {
                   border: `2px solid ${colors.greenLrgb}`,
                   background: "white",
                   padding: 0,
-                  opacity: inventoryPage === 1 ? 0.5 : 1,
+                  opacity: currentInventoryPage === 1 ? 0.5 : 1,
                 }}
               >
                 <ChevronLeft size={14} color={colors.charcoal} />
@@ -418,7 +483,7 @@ export default function MealPlanner() {
                   textAlign: "center",
                 }}
               >
-                Page {inventoryPage} of {inventoryTotalPages}
+                Page {currentInventoryPage} of {inventoryTotalPages}
               </span>
               <button
                 type="button"
@@ -426,7 +491,7 @@ export default function MealPlanner() {
                 onClick={() =>
                   setInventoryPage((p) => Math.min(inventoryTotalPages, p + 1))
                 }
-                disabled={inventoryPage === inventoryTotalPages}
+                disabled={currentInventoryPage === inventoryTotalPages}
                 style={{
                   width: 30,
                   height: 30,
@@ -434,7 +499,8 @@ export default function MealPlanner() {
                   border: `2px solid ${colors.greenLrgb}`,
                   background: "white",
                   padding: 0,
-                  opacity: inventoryPage === inventoryTotalPages ? 0.5 : 1,
+                  opacity:
+                    currentInventoryPage === inventoryTotalPages ? 0.5 : 1,
                 }}
               >
                 <ChevronRight size={14} color={colors.charcoal} />
@@ -924,8 +990,8 @@ export default function MealPlanner() {
               </label>
               <select
                 className="form-select"
-                value={linkedItem}
-                onChange={(e) => setLinkedItem(e.target.value)}
+                value={linkedItemId}
+                onChange={(e) => setLinkedItemId(e.target.value)}
                 style={{
                   border: `1.5px solid ${colors.greenLrgb}`,
                   borderRadius: 8,
@@ -933,8 +999,9 @@ export default function MealPlanner() {
               >
                 <option value="">No linked ingredient</option>
                 {inventoryItems.map((item) => (
-                  <option key={item.id} value={item.name}>
+                  <option key={item.id} value={item.id}>
                     {item.name} ({item.quantity} {item.quantityUnit})
+                    {item.reserved ? " — reserved" : ""}
                   </option>
                 ))}
               </select>

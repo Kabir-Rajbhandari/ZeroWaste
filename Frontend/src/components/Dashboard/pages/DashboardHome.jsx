@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
 import { analyticsApi, foodApi } from "../../../services/api";
-import {
-  getRecentActivity as getLocalActivity,
-  onActivityLogged,
-} from "../../../utils/activitylog";
+import { onActivityLogged } from "../../../utils/activitylog";
 import { useCountUp } from "../../../utils/useCountUp";
 
 const EXPIRING_WINDOW_DAYS = 7;
@@ -51,6 +48,8 @@ function getActivityConfig(type) {
       return { bg: "#FFEBEE", color: "#C62828", label: "Expired" };
     case "REMOVED":
       return { bg: "#F3F4F6", color: "#4B5563", label: "Removed" };
+    case "MEAL_PLANNED":
+      return { bg: "#EDE7F6", color: "#5E35B1", label: "Meal Planned" };
     default:
       return { bg: "#E8F5E9", color: "#2E7D32", label: "Activity" };
   }
@@ -74,6 +73,10 @@ function describeActivity(entry) {
       return `Removed ${name}`;
     case "REQUESTED":
       return `Requested ${name}`;
+    case "MEAL_PLANNED":
+      return name && name !== "an item"
+        ? `Planned meal: ${name}`
+        : "Planned a meal";
     default:
       return entry.title || `${type} ${name}`;
   }
@@ -89,16 +92,7 @@ function mapBackendActivity(recent) {
 }
 
 function mergeActivity(backendEntries, limit = 20) {
-  const localMealPlans = getLocalActivity(20)
-    .filter((e) => (e.title || "").startsWith("Planned meal"))
-    .map((e) => ({
-      id: `local-${e.id || Math.random()}`,
-      type: "PLANNED",
-      title: e.title,
-      timestamp: e.timestamp || new Date().toISOString(),
-    }));
-
-  return [...backendEntries, ...localMealPlans]
+  return [...backendEntries]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, limit);
 }
@@ -157,6 +151,76 @@ const viewAllStyle = {
   cursor: "pointer",
   padding: 0,
 };
+
+function StatCard({
+  label,
+  value,
+  caption,
+  icon: Icon,
+  to,
+  idx,
+  loading,
+  onNavigate,
+}) {
+  const isNumeric = typeof value === "number";
+  const animatedValue = useCountUp(
+    isNumeric ? value : 0,
+    2000,
+    !loading && isNumeric,
+  );
+  const displayValue = isNumeric ? animatedValue : value;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate?.(to)}
+      className="dashboard-stat-card"
+      style={{
+        ...cardBase,
+        padding: "1.25rem 1.4rem",
+        textAlign: "left",
+        cursor: "pointer",
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+        animationDelay: `${idx * 100}ms`,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = shadows.md)}
+      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = shadows.sm)}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "1rem",
+            fontWeight: 600,
+            color: colors.charcoal,
+            opacity: 0.7,
+          }}
+        >
+          {label}
+        </span>
+        <Icon size={50} color={colors.greenL} strokeWidth={2} />
+      </div>
+      <div
+        style={{
+          fontFamily: fonts.body,
+          fontSize: "3rem",
+          opacity: 0.7,
+          fontWeight: 700,
+          color: colors.charcoal,
+          margin: "0.35rem 0 0.15rem",
+        }}
+      >
+        {loading ? "…" : displayValue}
+      </div>
+      <div style={{ fontSize: "0.9rem", color: colors.muted }}>{caption}</div>
+    </button>
+  );
+}
 
 export default function DashboardHome({ onNavigate }) {
   const [items, setItems] = useState([]);
@@ -425,73 +489,15 @@ export default function DashboardHome({ onNavigate }) {
           marginBottom: "1.5rem",
         }}
       >
-        {stats.map(({ label, value, caption, icon: Icon, to }, idx) => {
-          const isNumeric = typeof value === "number";
-          const animatedValue = useCountUp(
-            isNumeric ? value : 0,
-            2000,
-            !loading && isNumeric,
-          );
-          const displayValue = isNumeric ? animatedValue : value;
-
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => onNavigate?.(to)}
-              className="dashboard-stat-card"
-              style={{
-                ...cardBase,
-                padding: "1.25rem 1.4rem",
-                textAlign: "left",
-                cursor: "pointer",
-                transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                animationDelay: `${idx * 100}ms`,
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.boxShadow = shadows.md)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.boxShadow = shadows.sm)
-              }
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "1rem",
-                    fontWeight: 600,
-                    color: colors.charcoal,
-                    opacity: 0.7,
-                  }}
-                >
-                  {label}
-                </span>
-                <Icon size={50} color={colors.greenL} strokeWidth={2} />
-              </div>
-              <div
-                style={{
-                  fontFamily: fonts.body,
-                  fontSize: "3rem",
-                  opacity: 0.7,
-                  fontWeight: 700,
-                  color: colors.charcoal,
-                  margin: "0.35rem 0 0.15rem",
-                }}
-              >
-                {loading ? "…" : displayValue}
-              </div>
-              <div style={{ fontSize: "0.9rem", color: colors.muted }}>
-                {caption}
-              </div>
-            </button>
-          );
-        })}
+        {stats.map((statProps, idx) => (
+          <StatCard
+            key={statProps.label}
+            {...statProps}
+            idx={idx}
+            loading={loading}
+            onNavigate={onNavigate}
+          />
+        ))}
       </div>
 
       {/* ---------- Main grid: Expiring / Inventory / Activity ---------- */}

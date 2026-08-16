@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "description": "Malaysians love food and alongside this, it create a problem of food waste.\r This is where ZeroWaste comes, it's an intelligent inventory management and planning web application.",
   "main": "index.js",
-  "scripts": {},
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "test:install-browsers": "playwright install --with-deps"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kabir-Rajbhandari/ZeroWaste.git"
@@ -17,6 +24,7 @@
   "homepage": "https://github.com/Kabir-Rajbhandari/ZeroWaste#readme",
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.1"
+    "@types/node": "^22.10.2",
+    "dotenv": "^16.4.7"
   }
 }

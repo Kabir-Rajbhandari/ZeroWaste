@@ -7,14 +7,46 @@ import {
   Pencil,
   Trash2,
   ChevronRight,
+  UtensilsCrossed,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi } from "../../../services/api";
 import { logActivity } from "../../../utils/activitylog";
 import DonateModal from "../DonateModal";
 
-// Inline confirm dialog component for FoodInventory.
-// Kept inside this file for easy recognition and to avoid creating a separate shared folder.
+const CATEGORIES = [
+  "All Categories",
+  "Fruits",
+  "Vegetable",
+  "Dairy",
+  "Meat",
+  "Other",
+];
+
+const CATEGORY_FALLBACK_IMAGES = {
+  Fruits:
+    "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=400&h=400&fit=crop",
+  Vegetable:
+    "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=400&h=400&fit=crop",
+  Dairy:
+    "https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=400&h=400&fit=crop",
+  Meat: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&h=400&fit=crop",
+  Other:
+    "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&h=400&fit=crop",
+};
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=400&fit=crop";
+
+function getFoodImage(item) {
+  if (item?.imageUrl && item.imageUrl.trim() !== "") {
+    return item.imageUrl;
+  }
+  return (
+    CATEGORY_FALLBACK_IMAGES[item?.category] || CATEGORY_FALLBACK_IMAGES.Other
+  );
+}
+
 function InlineConfirmDialog({
   open,
   title,
@@ -110,19 +142,7 @@ function InlineConfirmDialog({
   );
 }
 
-const CATEGORIES = [
-  "All Categories",
-  "Fruits",
-  "Vegetable",
-  "Dairy",
-  "Meat",
-  "Other",
-];
-
 const ITEMS_PER_PAGE = 6;
-
-const DEFAULT_IMAGE =
-  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop";
 
 function formatDate(dateStr) {
   if (!dateStr) return "—";
@@ -146,7 +166,6 @@ export default function FoodInventory({ onNavigate }) {
   const [page, setPage] = useState(1);
 
   const loadItems = useCallback(async () => {
-    setLoading(true);
     setErrMsg("");
     try {
       const data = await foodApi.getAll();
@@ -160,8 +179,20 @@ export default function FoodInventory({ onNavigate }) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadItems();
+    let isMounted = true;
+
+    const fetchItems = async () => {
+      setLoading(true);
+      if (isMounted) {
+        await loadItems();
+      }
+    };
+
+    fetchItems();
+
+    return () => {
+      isMounted = false;
+    };
   }, [loadItems]);
 
   const handleDelete = async (id) => {
@@ -243,16 +274,37 @@ export default function FoodInventory({ onNavigate }) {
 
       <style>
         {`
-          .search{
-          outline:none;
+          @keyframes slideInUp {
+            from {
+              opacity: 0;
+              transform: translateY(30px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .food-card {
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+          }
+
+          .food-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08) !important;
+          }
+
+          .search {
+            outline: none;
             border-color: ${colors.greenL};
           }
-          .search:focus{
+
+          .search:focus {
             border-color: ${colors.greenLrgb};
             box-shadow: 0 0 0 0.23rem ${colors.greenLrgb};
           }
-          
-            .add-item {
+
+          .add-item {
             opacity: 0.75;
             transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
           }
@@ -263,12 +315,12 @@ export default function FoodInventory({ onNavigate }) {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
 
-          .page-btn{
+          .page-btn {
             transition: all 0.15s ease;
           }
 
-          .page-btn:hover:not(:disabled){
-            opacity:0.85;
+          .page-btn:hover:not(:disabled) {
+            opacity: 0.85;
           }
 
           .donate-btn {
@@ -282,10 +334,24 @@ export default function FoodInventory({ onNavigate }) {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
 
-          .used-btn:hover{
+          .used-btn {
+            transition: all 0.25s ease;
+          }
+
+          .used-btn:hover {
             opacity: 1 !important;
-            background:${colors.greenLrgb};
+            background: ${colors.greenLrgb};
             border-color: transparent;
+          }
+
+          .action-icon-btn {
+            transition: transform 0.2s ease, opacity 0.2s ease;
+            opacity: 0.8;
+          }
+
+          .action-icon-btn:hover {
+            transform: scale(1.15);
+            opacity: 1;
           }
         `}
       </style>
@@ -316,7 +382,10 @@ export default function FoodInventory({ onNavigate }) {
             }}
             placeholder="Search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
@@ -336,7 +405,10 @@ export default function FoodInventory({ onNavigate }) {
               backgroundImage: "none",
             }}
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setPage(1);
+            }}
             onFocus={() => setIsOpen(true)}
             onBlur={() => setIsOpen(false)}
           >
@@ -386,81 +458,131 @@ export default function FoodInventory({ onNavigate }) {
         style={{
           background: colors.authGreen,
           border: `2px solid ${colors.greenLrgb}`,
+          minHeight: "440px",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {loading ? (
-          <div className="text-center py-5" style={{ color: colors.muted }}>
+          <div
+            className="text-center py-5 my-auto"
+            style={{ color: colors.muted }}
+          >
             Loading inventory…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-5" style={{ color: colors.muted }}>
+          <div
+            className="text-center py-5 my-auto"
+            style={{ color: colors.muted }}
+          >
             {items.length === 0
               ? "No food items yet. Add your first item."
               : "No items match your search or filter."}
           </div>
         ) : (
-          <div
-            className="row g-4"
-            style={{ alignSelf: "flex-start", width: "100%" }}
-          >
-            {paginatedItems.map((item) => {
+          <div className="row g-4" style={{ width: "100%", margin: 0 }}>
+            {paginatedItems.map((item, idx) => {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               const expiry = item.expiryDate ? new Date(item.expiryDate) : null;
               const isExpired = expiry && expiry < today && !item.donated;
+
               return (
-                <div className="col-12 col-md-6 col-lg-4" key={item.id}>
+                <div
+                  className="col-12 col-md-6 col-lg-4 d-flex align-items-stretch"
+                  key={item.id}
+                >
                   <div
-                    className="d-flex gap-3 p-3 rounded-4 h-100"
+                    className="d-flex gap-3 p-3 rounded-4 w-100 food-card position-relative"
                     style={{
                       background: colors.low_greenFade,
-                      boxShadow: "0 0px 5px rgb(169, 169, 169)",
+                      border: `2px solid ${colors.greenLrgb}`,
+                      animation: `slideInUp 0.6s ease-out ${idx * 0.05}s backwards`,
                     }}
                   >
                     <img
-                      src={item.imageUrl || DEFAULT_IMAGE}
+                      src={getFoodImage(item)}
                       alt={item.name}
                       className="rounded-3 flex-shrink-0"
-                      style={{ width: 90, height: 84, objectFit: "contain" }}
+                      style={{
+                        width: 90,
+                        height: 90,
+                        objectFit: "cover",
+                        backgroundColor: colors.white,
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.src = FALLBACK_IMAGE;
+                      }}
                     />
-                    <div className="flex-grow-1">
-                      <div
-                        className="fw-bold"
-                        style={{
-                          color: colors.greenD,
-                        }}
-                      >
-                        {item.name}
+
+                    <div
+                      className="d-flex flex-column flex-grow-1"
+                      style={{ minWidth: 0 }}
+                    >
+                      <div className="d-flex align-items-center justify-content-between gap-1 mb-1">
+                        <div
+                          className="fw-bold text-truncate"
+                          style={{
+                            color: colors.greenD,
+                            fontSize: "0.98rem",
+                          }}
+                          title={item.name}
+                        >
+                          {item.name}
+                        </div>
+                        {item.reserved && (
+                          <span
+                            className="d-inline-flex align-items-center gap-1 flex-shrink-0"
+                            title="Linked to a planned meal"
+                            style={{
+                              fontSize: "0.68rem",
+                              fontWeight: 700,
+                              color: colors.greenD,
+                              backgroundColor: colors.authGreen,
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            <UtensilsCrossed size={10} /> Reserved
+                          </span>
+                        )}
                       </div>
-                      <div className="small" style={{ color: colors.charcoal }}>
+
+                      <div
+                        className="small fw-medium"
+                        style={{ color: colors.charcoal }}
+                      >
                         {item.quantity} {item.quantityUnit} - {item.category}
                       </div>
-                      <div className="small" style={{ color: colors.muted }}>
+                      <div
+                        className="small mb-2"
+                        style={{ color: colors.muted, fontSize: "0.78rem" }}
+                      >
                         Expires {formatDate(item.expiryDate)}
                       </div>
 
-                      <div className="d-flex align-items-center gap-3 mb-2 mt-1">
+                      <div className="d-flex align-items-center gap-3 mb-2">
                         <button
                           type="button"
-                          className="btn btn-link p-0"
+                          className="btn btn-link p-0 action-icon-btn"
                           style={{ color: colors.greenL }}
                           onClick={() => onNavigate?.("edit-food", item)}
                           title="Edit"
                         >
-                          <Pencil size={18} />
+                          <Pencil size={17} />
                         </button>
                         <button
                           type="button"
-                          className="btn btn-link p-0"
+                          className="btn btn-link p-0 action-icon-btn"
                           style={{ color: "#c0392b" }}
                           onClick={() => handleDelete(item.id)}
                           title="Delete"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={17} />
                         </button>
                       </div>
 
-                      <div className="d-flex gap-4">
+                      <div className="d-flex gap-2 mt-auto">
                         {isExpired ? (
                           <button
                             type="button"
@@ -469,11 +591,10 @@ export default function FoodInventory({ onNavigate }) {
                               background: "#c0392b",
                               border: "none",
                               color: colors.white,
-                              boxShadow: "0 0px 5px rgb(169, 169, 169)",
                               fontSize: "0.85rem",
                               fontWeight: 500,
                               borderRadius: 4,
-                              padding: "0.45rem 1.15rem",
+                              padding: "0.45rem",
                             }}
                             disabled
                           >
@@ -491,9 +612,8 @@ export default function FoodInventory({ onNavigate }) {
                                 fontWeight: 600,
                                 borderRadius: 4,
                                 borderWidth: "2px",
-                                padding: "0.45rem 1.25rem",
-                                fontSize: "0.9rem",
-                                transition: "all 0.5s ease",
+                                padding: "0.45rem",
+                                fontSize: "0.88rem",
                               }}
                               onClick={() => handleUsed(item.id)}
                             >
@@ -506,10 +626,9 @@ export default function FoodInventory({ onNavigate }) {
                                 ...btnPrimaryStyle,
                                 borderRadius: 4,
                                 fontWeight: 600,
-                                padding: "0.45rem 1.15rem",
-                                fontSize: "0.9rem",
+                                padding: "0.45rem",
+                                fontSize: "0.88rem",
                                 color: colors.white,
-                                transition: "all 0.5s ease",
                               }}
                               onClick={() => setDonateTarget(item)}
                             >
@@ -526,11 +645,12 @@ export default function FoodInventory({ onNavigate }) {
           </div>
         )}
       </div>
+
       {!loading && filtered.length > 0 && totalPages > 1 && (
         <div className="d-flex align-items-center justify-content-end gap-3 mt-4">
           <button
             type="button"
-            className="btn btn-sm p-1"
+            className="btn btn-sm p-1 page-btn"
             style={{
               color: currentPage === 1 ? colors.border : colors.charcoal,
               background: "none",
@@ -547,7 +667,7 @@ export default function FoodInventory({ onNavigate }) {
           </span>
           <button
             type="button"
-            className="btn btn-sm p-1"
+            className="btn btn-sm p-1 page-btn"
             style={{
               color:
                 currentPage === totalPages ? colors.border : colors.charcoal,

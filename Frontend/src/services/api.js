@@ -217,6 +217,22 @@ export const userApi = {
   },
 };
 
+export const mealPlanApi = {
+  getRange(startDate, endDate) {
+    const params = new URLSearchParams({ startDate, endDate });
+    return request(`/api/meal-plans?${params.toString()}`, { method: "GET" });
+  },
+  upsert({ mealDate, mealType, name, linkedFoodItemId }) {
+    return request("/api/meal-plans", {
+      method: "PUT",
+      body: JSON.stringify({ mealDate, mealType, name, linkedFoodItemId }),
+    });
+  },
+  delete(id) {
+    return request(`/api/meal-plans/${id}`, { method: "DELETE" });
+  },
+};
+
 export const notificationApi = {
   getAll() {
     return request("/api/notifications", { method: "GET" });
@@ -269,10 +285,9 @@ export const analyticsApi = {
   getInventoryOverview(category) {
     const params = withCategoryParam(new URLSearchParams(), category);
     const qs = params.toString();
-    return request(
-      `/api/analytics/inventory-overview${qs ? `?${qs}` : ""}`,
-      { method: "GET" },
-    );
+    return request(`/api/analytics/inventory-overview${qs ? `?${qs}` : ""}`, {
+      method: "GET",
+    });
   },
 
   getFoodSavedBreakdown(period, category, range) {

@@ -63,11 +63,11 @@ public class FoodItem {
     @Column(name = "contact_detail")
     private String contactDetail;
 
-    /**
-     * True once an "expiring soon" notification has been generated for this
-     * item, so the daily scan never alerts on the same item twice.
-     */
     @Builder.Default
     @Column(name = "expiry_alert_sent", columnDefinition = "boolean default false")
     private Boolean expiryAlertSent = false;
+
+    @Builder.Default
+    @Column(name = "reserved", columnDefinition = "boolean default false")
+    private Boolean reserved = false;
 }

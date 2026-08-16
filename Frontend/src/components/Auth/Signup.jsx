@@ -560,7 +560,7 @@ export default function Signup({ onNavigate }) {
                 }}
                 disabled={status === "loading"}
               >
-                {status === "loading" ? "Registering…" : "Register"}
+                Register
               </button>
 
               <p

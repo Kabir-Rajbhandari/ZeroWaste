@@ -31,6 +31,7 @@ public class FoodItemResponse {
     // request on this item, so the frontend can show "Request Pending"
     // instead of letting them request the same item twice.
     private Boolean alreadyRequestedByMe;
+    private Boolean reserved;
 
     public static FoodItemResponse from(FoodItem item) {
         return from(item, null, false, null, false, null);
@@ -61,7 +62,8 @@ public class FoodItemResponse {
                 item.getContactDetail(),
                 isOwn,
                 donorPublic,
-                alreadyRequestedByMe
+                alreadyRequestedByMe,
+                item.getReserved()
         );
     }
 }

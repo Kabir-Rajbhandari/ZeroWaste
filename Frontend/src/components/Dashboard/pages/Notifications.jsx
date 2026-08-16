@@ -1,11 +1,6 @@
 // src/components/Dashboard/pages/Notifications.jsx
 import { useEffect, useMemo, useState } from "react";
-import {
-  colors,
-  fonts,
-  btnPrimaryStyle,
-  btnOutlineStyle,
-} from "../../../theme";
+import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { notificationApi } from "../../../services/api";
 
 const TABS = ["All", "Alerts", "Donations", "Reminders", "System"];
@@ -53,7 +48,6 @@ export default function Notifications({ onUnreadCountChange }) {
   };
 
   useEffect(() => {
-
     (async () => {
       await load();
       // Visiting this page counts as having seen everything — persist that
@@ -140,6 +134,18 @@ export default function Notifications({ onUnreadCountChange }) {
             transform: translateY(-1px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
+
+          .accept-btn {
+            opacity: 0.75;
+            transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+          }
+
+          .accept-btn:hover:not(:disabled) {
+            opacity: 1;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+          }
+
           .fltr-btn{
           padding: "0.5rem 1.4rem",
           fontSize: "0.9rem",
@@ -256,21 +262,33 @@ export default function Notifications({ onUnreadCountChange }) {
                     <div className="d-flex align-items-center gap-2 mt-2">
                       <button
                         type="button"
-                        className="btn btn-sm"
+                        className="btn btn-sm accept-btn"
                         style={{
                           ...btnPrimaryStyle,
-                          background: colors.authGreen,
-                          borderColor: colors.authGreen,
+                          border: "none",
+                          borderRadius: 4,
+                          padding: "0.25rem 1rem",
+                          fontSize: "0.9rem",
+                          color: colors.white,
+                          transition: "all 0.5s ease",
                         }}
                         disabled={actioningId === n.id}
                         onClick={() => handleAccept(n.id)}
                       >
-                        {actioningId === n.id ? "Working…" : "Accept"}
+                        Accept
                       </button>
                       <button
                         type="button"
                         className="btn btn-sm"
-                        style={btnOutlineStyle}
+                        style={{
+                          borderRadius: 4,
+                          background: "#D96868",
+                          fontFamily: fonts.body,
+                          fontWeight: 600,
+                          padding: "0.25rem 1rem",
+                          fontSize: "0.9rem",
+                          color: colors.white,
+                        }}
                         disabled={actioningId === n.id}
                         onClick={() => handleDecline(n.id)}
                       >
