@@ -33,7 +33,19 @@ function DonutChart({
   const padding = 10;
   const radius = (size - strokeWidth - padding) / 2;
   const circumference = 2 * Math.PI * radius;
-  let cumulative = 0;
+
+  // Precompute each segment's dash offset in one pure pass instead of
+  // mutating a `cumulative` variable inside the JSX .map() below — mutating
+  // a render-scoped variable as a side effect of rendering is what triggers
+  // "Cannot reassign variable after render completes".
+  const segments = data.reduce((acc, d) => {
+    if (d.percent <= 0) return acc;
+    const prevCumulative =
+      acc.length > 0 ? acc[acc.length - 1].cumulativeEnd : 0;
+    const cumulativeEnd = prevCumulative + (d.percent / 100) * circumference;
+    acc.push({ ...d, dashoffset: -prevCumulative, cumulativeEnd });
+    return acc;
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -63,14 +75,11 @@ function DonutChart({
         stroke="#DEE5D4"
         strokeWidth={strokeWidth}
       />
-      {data.map((d, idx) => {
-        if (d.percent <= 0) return null;
-
+      {segments.map((d) => {
         const safePercent = d.percent >= 100 ? 99.999 : d.percent;
         const length = (safePercent / 100) * circumference;
         const dasharray = `${length} ${circumference - length}`;
-        const dashoffset = -cumulative;
-        cumulative += (d.percent / 100) * circumference;
+        const dashoffset = d.dashoffset;
 
         const isSelected = selectedCategory === d.category;
         const isDimmed = selectedCategory && !isSelected;
@@ -298,9 +307,14 @@ export default function Analytics() {
         }
       : null;
 
+  // Derived, not effect-synced: whether we're waiting on the user to finish
+  // picking a custom range is fully computable from `period`/`rangeParam`
+  // every render, so it doesn't need its own setState — computing it here
+  // avoids a synchronous setState(false)-then-return inside the effect below.
+  const awaitingCustomRange = period === "custom" && !rangeParam;
+
   useEffect(() => {
-    if (period === "custom" && !rangeParam) {
-      setLoading(false);
+    if (awaitingCustomRange) {
       return;
     }
     let cancelled = false;
@@ -330,7 +344,13 @@ export default function Analytics() {
     return () => {
       cancelled = true;
     };
-  }, [period, category, customRange.start, customRange.end]);
+  }, [
+    period,
+    category,
+    customRange.start,
+    customRange.end,
+    awaitingCustomRange,
+  ]);
 
   const handleSelectCategory = (clicked) => {
     setCategory((current) => (current === clicked ? "All" : clicked));
@@ -555,9 +575,34 @@ export default function Analytics() {
         <div className="alert alert-danger py-2 small mb-3">{errMsg}</div>
       )}
 
-      {loading ? (
+      {awaitingCustomRange ? (
+        <div className="text-center py-5" style={{ color: colors.muted }}>
+          Pick a start and end date to view analytics for your custom range.
+        </div>
+      ) : loading ? (
         <div className="text-center py-5" style={{ color: colors.muted }}>
           Loading analytics…
+        </div>
+      ) : !summary?.foodSavedCount && !summary?.donationsMadeCount ? (
+        // UC4 – Food Analytics, Alternative Course 3a: "If no food-saving
+        // data is found, system shows a message encouraging the user to
+        // begin logging and donating to view progress."
+        <div
+          className="text-center py-5 rounded-4"
+          style={{
+            background: colors.authGreen,
+            border: `2px dashed ${colors.greenLrgb}`,
+            color: colors.charcoal,
+          }}
+        >
+          <Leaf size={40} style={{ opacity: 0.6, marginBottom: "0.75rem" }} />
+          <h5 style={{ fontFamily: fonts.body, fontWeight: 700 }}>
+            No food-saving data yet
+          </h5>
+          <p style={{ color: colors.muted, marginBottom: 0 }}>
+            Start logging items in your Food Inventory and marking them as used
+            or donated to see your impact here.
+          </p>
         </div>
       ) : (
         <>

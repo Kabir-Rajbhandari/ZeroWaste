@@ -52,6 +52,17 @@ export default function Login({ onNavigate }) {
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resendStatus, setResendStatus] = useState("idle");
 
+  // ── Forgot Password ──────────────────────────────────────────────────────
+  // loginStage additionally cycles through "forgotEmail" (enter email) →
+  // "forgotReset" (enter code + new password) → back to "credentials".
+  const [pendingResetEmail, setPendingResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [resendResetStatus, setResendResetStatus] = useState("idle");
+
   const [verifyToast, setVerifyToast] = useState(() => {
     try {
       const raw = sessionStorage.getItem("zw_verify_toast");
@@ -140,6 +151,12 @@ export default function Login({ onNavigate }) {
     if (loginStage === "otp") {
       return handleVerifyOtp();
     }
+    if (loginStage === "forgotEmail") {
+      return handleForgotPasswordSubmit();
+    }
+    if (loginStage === "forgotReset") {
+      return handleResetPasswordSubmit();
+    }
 
     const validationErrors = validate();
     if (validationErrors) {
@@ -220,6 +237,115 @@ export default function Login({ onNavigate }) {
       setErrMsg(err.message || "Invalid code. Please try again.");
       setStatus("error");
     }
+  };
+
+  // ── Forgot Password, step 1: request a code ─────────────────────────────
+  const handleForgotPasswordSubmit = async () => {
+    const email = form.email.trim();
+    if (!email.includes("@")) {
+      setFieldErrors({ email: "Enter a valid email address." });
+      setErrMsg("");
+      setStatus("error");
+      return;
+    }
+
+    setFieldErrors({});
+    setStatus("loading");
+    setErrMsg("");
+    setInfoMsg("");
+
+    try {
+      const data = await authApi.forgotPassword(email);
+      setPendingResetEmail(email);
+      setLoginStage("forgotReset");
+      setInfoMsg(
+        data.message || "A verification code has been sent to your email.",
+      );
+      setStatus("idle");
+    } catch (err) {
+      setErrMsg(
+        err.message || "Couldn't send the reset code. Please try again.",
+      );
+      setStatus("error");
+    }
+  };
+
+  // ── Forgot Password, step 2: submit code + new password ─────────────────
+  const handleResetPasswordSubmit = async () => {
+    const errors = {};
+    if (!/^\d{6}$/.test(resetCode.trim()))
+      errors.resetCode = "Enter the 6-digit code from your email.";
+    if (newPassword.length < 8)
+      errors.newPassword = "Password must be at least 8 characters.";
+    if (newPassword !== confirmNewPassword)
+      errors.confirmNewPassword = "Passwords do not match.";
+
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      setErrMsg("");
+      setStatus("error");
+      return;
+    }
+
+    setFieldErrors({});
+    setStatus("loading");
+    setErrMsg("");
+    setInfoMsg("");
+
+    try {
+      const data = await authApi.resetPassword({
+        email: pendingResetEmail,
+        code: resetCode.trim(),
+        newPassword,
+        confirmNewPassword,
+      });
+
+      // Back to the normal sign-in screen, with the email prefilled so the
+      // user can go straight into typing their new password.
+      setLoginStage("credentials");
+      setForm((prev) => ({ ...prev, email: pendingResetEmail, password: "" }));
+      setResetCode("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPendingResetEmail("");
+      setResendResetStatus("idle");
+      setInfoMsg(
+        data.message || "Your password has been reset! You can now log in.",
+      );
+      setStatus("idle");
+    } catch (err) {
+      setErrMsg(
+        err.message || "Couldn't reset your password. Please try again.",
+      );
+      setStatus("error");
+    }
+  };
+
+  // Alt-flow, Line 6-equivalent: invalid/expired reset code → resend.
+  const handleResendResetCode = async () => {
+    setResendResetStatus("loading");
+    setErrMsg("");
+    try {
+      const data = await authApi.forgotPassword(pendingResetEmail);
+      setInfoMsg(data.message || "A new code has been sent to your email.");
+      setResendResetStatus("sent");
+    } catch (err) {
+      setErrMsg(err.message || "Couldn't resend the code. Please try again.");
+      setResendResetStatus("idle");
+    }
+  };
+
+  const cancelForgotPassword = () => {
+    setLoginStage("credentials");
+    setInfoMsg("");
+    setErrMsg("");
+    setFieldErrors({});
+    setStatus("idle");
+    setResetCode("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setPendingResetEmail("");
+    setResendResetStatus("idle");
   };
 
   return (
@@ -434,7 +560,13 @@ export default function Login({ onNavigate }) {
               className="text-center fw-bold text-dark mb-2"
               style={{ fontSize: "1.45rem" }}
             >
-              Welcome Back
+              {loginStage === "otp"
+                ? "Verify Your Identity"
+                : loginStage === "forgotEmail"
+                  ? "Forgot Password"
+                  : loginStage === "forgotReset"
+                    ? "Reset Password"
+                    : "Welcome Back"}
             </h1>
             <p
               className="text-center text-dark mb-4"
@@ -444,7 +576,13 @@ export default function Login({ onNavigate }) {
                 color: colors.muted,
               }}
             >
-              Log in to your SavePlate account.
+              {loginStage === "otp"
+                ? "Enter the 6-digit code we sent to your email."
+                : loginStage === "forgotEmail"
+                  ? "Enter your account email and we'll send you a verification code."
+                  : loginStage === "forgotReset"
+                    ? "Enter the code and choose a new password."
+                    : "Log in to your SavePlate account."}
             </p>
 
             <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
@@ -499,11 +637,15 @@ export default function Login({ onNavigate }) {
                   value={
                     loginStage === "otp"
                       ? pendingEmail || form.email
-                      : form.email
+                      : loginStage === "forgotReset"
+                        ? pendingResetEmail
+                        : form.email
                   }
                   onChange={handleChange}
                   required
-                  readOnly={loginStage === "otp"}
+                  readOnly={
+                    loginStage === "otp" || loginStage === "forgotReset"
+                  }
                 />
                 {fieldErrors.email && (
                   <p className="text-danger small mt-2 mb-0">
@@ -539,6 +681,192 @@ export default function Login({ onNavigate }) {
                     Enter the 6-digit code sent to your email.
                   </p>
                 </div>
+              ) : loginStage === "forgotEmail" ? (
+                <p
+                  className="mb-0"
+                  style={{
+                    ...bodyTextStyle,
+                    fontSize: "0.9rem",
+                    color: colors.muted,
+                  }}
+                >
+                  Enter the email on your account above and we'll send a 6-digit
+                  verification code you can use to set a new password.
+                </p>
+              ) : loginStage === "forgotReset" ? (
+                <>
+                  <div>
+                    <label
+                      htmlFor="resetCode"
+                      className="form-label fw-semibold text-dark mb-2"
+                      style={{ ...bodyTextStyle, fontSize: "0.95rem" }}
+                    >
+                      Verification code
+                    </label>
+                    <input
+                      id="resetCode"
+                      name="resetCode"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      className={`form-control rounded-3 py-2 login-input text-center ${
+                        fieldErrors.resetCode ? "is-invalid" : ""
+                      }`}
+                      style={{
+                        ...inputStyle,
+                        fontFamily: fonts.body,
+                        letterSpacing: "0.4em",
+                      }}
+                      placeholder="123456"
+                      value={resetCode}
+                      onChange={(e) => {
+                        setResetCode(
+                          e.target.value.replace(/\D/g, "").slice(0, 6),
+                        );
+                        if (fieldErrors.resetCode) {
+                          setFieldErrors((prev) => ({
+                            ...prev,
+                            resetCode: null,
+                          }));
+                        }
+                      }}
+                      required
+                    />
+                    {fieldErrors.resetCode && (
+                      <p className="text-danger small mt-2 mb-0">
+                        {fieldErrors.resetCode}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="newPassword"
+                      className="form-label fw-semibold text-dark mb-2"
+                      style={{ ...bodyTextStyle, fontSize: "0.95rem" }}
+                    >
+                      New Password
+                    </label>
+                    <div className="position-relative">
+                      <input
+                        id="newPassword"
+                        name="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        className={`form-control rounded-3 py-2 pe-5 login-input ${
+                          fieldErrors.newPassword ? "is-invalid" : ""
+                        }`}
+                        style={{ ...inputStyle, paddingRight: "3rem" }}
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          if (fieldErrors.newPassword) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              newPassword: null,
+                            }));
+                          }
+                        }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        aria-label={
+                          showNewPassword ? "Hide password" : "Show password"
+                        }
+                        style={{ color: colors.muted }}
+                      >
+                        {showNewPassword ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
+                      </button>
+                    </div>
+                    {fieldErrors.newPassword && (
+                      <p className="text-danger small mt-2 mb-0">
+                        {fieldErrors.newPassword}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="confirmNewPassword"
+                      className="form-label fw-semibold text-dark mb-2"
+                      style={{ ...bodyTextStyle, fontSize: "0.95rem" }}
+                    >
+                      Confirm New Password
+                    </label>
+                    <div className="position-relative">
+                      <input
+                        id="confirmNewPassword"
+                        name="confirmNewPassword"
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        className={`form-control rounded-3 py-2 pe-5 login-input ${
+                          fieldErrors.confirmNewPassword ? "is-invalid" : ""
+                        }`}
+                        style={{ ...inputStyle, paddingRight: "3rem" }}
+                        value={confirmNewPassword}
+                        onChange={(e) => {
+                          setConfirmNewPassword(e.target.value);
+                          if (fieldErrors.confirmNewPassword) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              confirmNewPassword: null,
+                            }));
+                          }
+                        }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
+                        onClick={() => setShowConfirmNewPassword((v) => !v)}
+                        aria-label={
+                          showConfirmNewPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                        style={{ color: colors.muted }}
+                      >
+                        {showConfirmNewPassword ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
+                      </button>
+                    </div>
+                    {fieldErrors.confirmNewPassword && (
+                      <p className="text-danger small mt-2 mb-0">
+                        {fieldErrors.confirmNewPassword}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-link p-0 text-start"
+                    style={{
+                      ...bodyTextStyle,
+                      fontSize: "0.9rem",
+                      color: colors.greenD,
+                    }}
+                    onClick={handleResendResetCode}
+                    disabled={
+                      resendResetStatus === "loading" ||
+                      resendResetStatus === "sent"
+                    }
+                  >
+                    {resendResetStatus === "loading"
+                      ? "Resending…"
+                      : resendResetStatus === "sent"
+                        ? "New code sent"
+                        : "Didn't get a code? Resend"}
+                  </button>
+                </>
               ) : (
                 <>
                   <div>
@@ -612,6 +940,12 @@ export default function Login({ onNavigate }) {
                         textDecoration: "none",
                         color: colors.charcoal,
                       }}
+                      onClick={() => {
+                        setLoginStage("forgotEmail");
+                        setErrMsg("");
+                        setInfoMsg("");
+                        setFieldErrors({});
+                      }}
                     >
                       Forgot Password?
                     </button>
@@ -657,7 +991,13 @@ export default function Login({ onNavigate }) {
                 }}
                 disabled={status === "loading"}
               >
-                {loginStage === "otp" ? "Verify Code" : "Login"}
+                {loginStage === "otp"
+                  ? "Verify Code"
+                  : loginStage === "forgotEmail"
+                    ? "Send Reset Code"
+                    : loginStage === "forgotReset"
+                      ? "Reset Password"
+                      : "Login"}
               </button>
 
               {loginStage === "otp" && (
@@ -671,6 +1011,18 @@ export default function Login({ onNavigate }) {
                     setErrMsg("");
                     setOtpCode("");
                   }}
+                >
+                  Back to sign in
+                </button>
+              )}
+
+              {(loginStage === "forgotEmail" ||
+                loginStage === "forgotReset") && (
+                <button
+                  type="button"
+                  className="btn btn-link text-dark px-0"
+                  style={{ ...bodyTextStyle, fontSize: "0.9rem" }}
+                  onClick={cancelForgotPassword}
                 >
                   Back to sign in
                 </button>

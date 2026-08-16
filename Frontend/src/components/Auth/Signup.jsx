@@ -2,9 +2,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { colors, fonts } from "../../theme";
-
-const SPRING_BOOT_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+import { authApi } from "../../services/api";
 
 const INITIAL_FORM_STATE = {
   fullName: "",
@@ -12,6 +10,19 @@ const INITIAL_FORM_STATE = {
   password: "",
   confirmPassword: "",
   householdSize: "",
+};
+
+// UC1, step 2: Privacy & Security Configuration is its own screen shown
+// right after registration succeeds — not part of the registration form.
+const INITIAL_SECURITY_FORM_STATE = {
+  donationPublic: true,
+  enableTwoFactor: false,
+};
+
+const INITIAL_COMPLETE_FORM_STATE = {
+  code: "",
+  newPassword: "",
+  confirmNewPassword: "",
 };
 
 const cardStyle = {
@@ -51,52 +62,56 @@ export default function Signup({ onNavigate }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [errMsg, setErrMsg] = useState("");
 
-  // ── Email verification link handling ──────────────────────────────────
+  // "form" (registration) → "security" (Privacy & Security Configuration,
+  // step 2) → "checkEmail" (verification email just sent, step 3 pending).
+  const [stage, setStage] = useState("form");
+  const [registeredEmail, setRegisteredEmail] = useState("");
+
+  // ── Step 2: Privacy & Security Configuration ────────────────────────────
+  const [securityForm, setSecurityForm] = useState(INITIAL_SECURITY_FORM_STATE);
+  const [securityStatus, setSecurityStatus] = useState("idle");
+  const [securityErrMsg, setSecurityErrMsg] = useState("");
+
+  // ── Email verification link handling (UC1, step 3) ─────────────────────
   const [verifyToken, setVerifyToken] = useState(() =>
     new URLSearchParams(window.location.search).get("token"),
   );
+  // "checking" (read-only status check) → "needsCode" (show code+password
+  // form) → "success" (account activated) | "alreadyVerified" | "error"
   const [verifyStatus, setVerifyStatus] = useState(
-    verifyToken ? "loading" : "idle",
+    verifyToken ? "checking" : "idle",
   );
   const [verifyMessage, setVerifyMessage] = useState("");
+
+  // ── Code + new password entry (UC1, step 3 continued) ──────────────────
+  const [completeForm, setCompleteForm] = useState(INITIAL_COMPLETE_FORM_STATE);
+  const [completeFieldErrors, setCompleteFieldErrors] = useState({});
+  const [completeErrMsg, setCompleteErrMsg] = useState("");
+  const [completeStatus, setCompleteStatus] = useState("idle");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [resendCodeStatus, setResendCodeStatus] = useState("idle");
 
   useEffect(() => {
     if (!verifyToken) return;
 
     let isMounted = true;
 
-    fetch(
-      `${SPRING_BOOT_URL}/api/auth/verify-email?token=${encodeURIComponent(
-        verifyToken,
-      )}`,
-      { method: "POST" },
-    )
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(
-            data.message || "Verification failed. Please try again.",
-          );
-        }
-        if (isMounted) {
-          setVerifyStatus("success");
-          setVerifyMessage(
-            data.message || "Your email has been verified! You can now log in.",
-          );
-        }
-
-        // CHANGED: tell any other open tab (e.g. a Login tab that's sitting
-        // there waiting) that a verification just succeeded. The `storage`
-        // event only fires in OTHER tabs, never this one — which is exactly
-        // what we want, since this tab already shows its own success card.
-        try {
-          localStorage.setItem(
-            "zw_email_verified_broadcast",
-            JSON.stringify({ success: true, at: Date.now() }),
-          );
-        } catch {
-          // localStorage unavailable — cross-tab sync just won't fire,
-          // verification itself still succeeded fine
+    // Read-only precheck — does NOT activate the account. Just tells us
+    // which screen to show: the code+password form, "already verified", or
+    // an expired/invalid-link message.
+    authApi
+      .checkVerificationToken(verifyToken)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data.alreadyVerified) {
+          setVerifyStatus("alreadyVerified");
+          setVerifyMessage(data.message);
+        } else if (data.valid) {
+          setVerifyStatus("needsCode");
+        } else {
+          setVerifyStatus("error");
+          setVerifyMessage(data.message);
         }
       })
       .catch((err) => {
@@ -114,8 +129,11 @@ export default function Signup({ onNavigate }) {
   }, [verifyToken]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
     // Clear field-specific error as user types
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
@@ -149,39 +167,263 @@ export default function Signup({ onNavigate }) {
     setErrMsg("");
 
     try {
-      const res = await fetch(`${SPRING_BOOT_URL}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          password: form.password,
-          householdSize:
-            form.householdSize === "" ? null : Number(form.householdSize),
-        }),
+      await authApi.register({
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        householdSize:
+          form.householdSize === "" ? null : Number(form.householdSize),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(
-          err.message || "Registration failed. Please try again.",
-        );
-      }
-
+      // UC1: registration succeeding moves the user to the Privacy &
+      // Security Configuration step next — NOT straight to login, and NOT
+      // straight to "check your email" (the email isn't sent until that
+      // step is submitted).
+      setRegisteredEmail(form.email.trim());
       setForm({ ...INITIAL_FORM_STATE });
       setStatus("idle");
-      onNavigate?.("login");
+      setStage("security");
     } catch (err) {
       setErrMsg(err.message || "Something went wrong. Please try again.");
       setStatus("error");
     }
   };
 
-  // Verification Screen
-  if (verifyToken) {
-    const isLoading = verifyStatus === "loading";
-    const isSuccess = verifyStatus === "success";
+  // ── Step 2: Privacy & Security Configuration ────────────────────────────
+  const handleSecurityChange = (e) => {
+    const { name, checked } = e.target;
+    setSecurityForm((prev) => ({ ...prev, [name]: checked }));
+  };
 
+  const handleSecuritySubmit = async (e) => {
+    e.preventDefault();
+    setSecurityStatus("loading");
+    setSecurityErrMsg("");
+
+    try {
+      await authApi.configureSecurity({
+        email: registeredEmail,
+        donationPublic: securityForm.donationPublic,
+        enableTwoFactor: securityForm.enableTwoFactor,
+      });
+      setSecurityStatus("idle");
+      // Step 3: system now sends the welcome email with the link + code.
+      setStage("checkEmail");
+    } catch (err) {
+      setSecurityErrMsg(
+        err.message || "Couldn't save your settings. Please try again.",
+      );
+      setSecurityStatus("error");
+    }
+  };
+
+  // ── Code + new password submission (UC1, step 3 continued) ─────────────
+  const handleCompleteChange = (e) => {
+    const { name, value } = e.target;
+    setCompleteForm((prev) => ({ ...prev, [name]: value }));
+    if (completeFieldErrors[name]) {
+      setCompleteFieldErrors((prev) => ({ ...prev, [name]: null }));
+    }
+  };
+
+  const validateComplete = () => {
+    const errors = {};
+    if (!/^\d{6}$/.test(completeForm.code.trim()))
+      errors.code = "Enter the 6-digit code from your email.";
+    if (completeForm.newPassword.length < 8)
+      errors.newPassword = "Password must be at least 8 characters.";
+    if (completeForm.newPassword !== completeForm.confirmNewPassword)
+      errors.confirmNewPassword = "Passwords do not match.";
+    return Object.keys(errors).length ? errors : null;
+  };
+
+  const handleCompleteSubmit = async (e) => {
+    e.preventDefault();
+    const validationErrors = validateComplete();
+    if (validationErrors) {
+      setCompleteFieldErrors(validationErrors);
+      setCompleteErrMsg("");
+      return;
+    }
+
+    setCompleteFieldErrors({});
+    setCompleteErrMsg("");
+    setCompleteStatus("loading");
+
+    try {
+      const data = await authApi.completeRegistration({
+        token: verifyToken,
+        code: completeForm.code.trim(),
+        newPassword: completeForm.newPassword,
+        confirmNewPassword: completeForm.confirmNewPassword,
+      });
+      setVerifyMessage(
+        data.message || "Your account has been verified and activated!",
+      );
+      setVerifyStatus("success");
+      setCompleteStatus("idle");
+
+      // Tell any other open tab (e.g. a Login tab sitting there waiting)
+      // that a verification just succeeded.
+      try {
+        localStorage.setItem(
+          "zw_email_verified_broadcast",
+          JSON.stringify({ success: true, at: Date.now() }),
+        );
+      } catch {
+        // localStorage unavailable — cross-tab sync just won't fire,
+        // verification itself still succeeded fine
+      }
+    } catch (err) {
+      setCompleteErrMsg(
+        err.message || "Could not verify your code. Please try again.",
+      );
+      setCompleteStatus("error");
+    }
+  };
+
+  const handleResendCode = async () => {
+    setResendCodeStatus("loading");
+    try {
+      await authApi.resendCode(verifyToken);
+      setResendCodeStatus("sent");
+      setCompleteErrMsg("");
+    } catch (err) {
+      setCompleteErrMsg(
+        err.message || "Couldn't resend the code. Please try again.",
+      );
+      setResendCodeStatus("idle");
+    }
+  };
+
+  // ── Step 2 Screen: Privacy & Security Configuration ─────────────────────
+  // Shown immediately after registration succeeds, before any email is sent.
+  if (!verifyToken && stage === "security") {
+    return (
+      <div
+        className="min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-5"
+        style={{ background: colors.white }}
+      >
+        <div
+          className="p-4 p-md-5"
+          style={{
+            maxWidth: 480,
+            width: "100%",
+            background: colors.authGreen,
+            borderRadius: 20,
+            boxShadow: "0 0px 12px rgba(0, 0, 0, 0.20)",
+          }}
+        >
+          <div className="text-center mb-4">
+            <img
+              draggable="false"
+              src="/images/zerowaste-logo.png"
+              alt="ZeroWaste"
+              className="img-fluid mb-3"
+              style={{ maxWidth: 110 }}
+            />
+            <h1
+              className="fw-bold mb-2"
+              style={{ fontSize: "1.3rem", color: colors.greenD }}
+            >
+              Privacy &amp; Security
+            </h1>
+            <p style={{ ...bodyTextStyle, fontSize: "0.9rem" }}>
+              A couple of quick settings before we send your verification email.
+              You can always change these later from Account Settings.
+            </p>
+          </div>
+
+          {securityErrMsg && (
+            <div
+              className="alert alert-danger py-2 mb-3"
+              style={{ fontSize: "0.85rem" }}
+              role="alert"
+            >
+              {securityErrMsg}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleSecuritySubmit}
+            className="d-flex flex-column gap-3"
+          >
+            <div
+              className="d-flex align-items-start gap-2 p-3 rounded-3"
+              style={{ background: "rgba(255,255,255,0.5)" }}
+            >
+              <input
+                id="donationPublic"
+                name="donationPublic"
+                type="checkbox"
+                className="form-check-input mt-1"
+                checked={securityForm.donationPublic}
+                onChange={handleSecurityChange}
+              />
+              <label
+                htmlFor="donationPublic"
+                className="mb-0"
+                style={{ ...bodyTextStyle, fontSize: "0.85rem" }}
+              >
+                <span className="fw-medium d-block">
+                  Make my donations visible to other households
+                </span>
+                When off, your donation listings are only visible to you in
+                Browse Food Items.
+              </label>
+            </div>
+
+            <div
+              className="d-flex align-items-start gap-2 p-3 rounded-3"
+              style={{ background: "rgba(255,255,255,0.5)" }}
+            >
+              <input
+                id="enableTwoFactor"
+                name="enableTwoFactor"
+                type="checkbox"
+                className="form-check-input mt-1"
+                checked={securityForm.enableTwoFactor}
+                onChange={handleSecurityChange}
+              />
+              <label
+                htmlFor="enableTwoFactor"
+                className="mb-0"
+                style={{ ...bodyTextStyle, fontSize: "0.85rem" }}
+              >
+                <span className="fw-medium d-block">
+                  Enable Two-Factor Authentication (2FA)
+                </span>
+                We'll email you a verification code each time you log in, for
+                extra account security.
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              className="btn w-100 text-white fw-bold text-uppercase rounded-3 py-2 signup-btn"
+              style={{
+                ...bodyTextStyle,
+                marginTop: "0.25rem",
+                height: "3.5rem",
+                background: colors.greenL,
+                fontSize: "0.9rem",
+                letterSpacing: "0.06em",
+                fontWeight: 600,
+              }}
+              disabled={securityStatus === "loading"}
+            >
+              {securityStatus === "loading" ? "Saving…" : "Continue"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 3 Screen: "check your email" pending state ──────────────────────
+  // Shown right after configureSecurity() succeeds — the verification email
+  // (link + 6-digit code) was just sent.
+  if (!verifyToken && stage === "checkEmail") {
     return (
       <div
         className="min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-5"
@@ -206,30 +448,292 @@ export default function Signup({ onNavigate }) {
               style={{ maxWidth: 110 }}
             />
           </div>
+          <h1
+            className="fw-bold mb-3"
+            style={{ fontSize: "1.3rem", color: colors.greenD }}
+          >
+            Check Your Email
+          </h1>
+          <p className="mb-4" style={{ ...bodyTextStyle, fontSize: "0.95rem" }}>
+            We've sent a verification link and a 6-digit code to{" "}
+            <strong>{registeredEmail}</strong>. Click the link, then enter the
+            code to activate your account.
+          </p>
+          <button
+            type="button"
+            className="btn text-white fw-bold text-uppercase rounded-3 py-2 px-4 signup-btn"
+            style={{
+              ...bodyTextStyle,
+              background: colors.greenL,
+              fontSize: "0.9rem",
+              letterSpacing: "0.06em",
+              fontWeight: 600,
+            }}
+            onClick={() => onNavigate?.("login")}
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-          {isLoading ? (
+  // Verification Screen
+  if (verifyToken) {
+    const isChecking = verifyStatus === "checking";
+    const isSuccess = verifyStatus === "success";
+    const isAlreadyVerified = verifyStatus === "alreadyVerified";
+    const isNeedsCode = verifyStatus === "needsCode";
+    const isDone = isSuccess || isAlreadyVerified; // both land on "Go to Login"
+
+    return (
+      <div
+        className="min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-5"
+        style={{ background: colors.white }}
+      >
+        <div
+          className="text-center p-4 p-md-5"
+          style={{
+            maxWidth: isNeedsCode ? 460 : 460,
+            width: "100%",
+            background: colors.authGreen,
+            borderRadius: 20,
+            boxShadow: "0 0px 12px rgba(0, 0, 0, 0.20)",
+          }}
+        >
+          <div className="mb-4">
+            <img
+              draggable="false"
+              src="/images/zerowaste-logo.png"
+              alt="ZeroWaste"
+              className="img-fluid"
+              style={{ maxWidth: 110 }}
+            />
+          </div>
+
+          {isChecking ? (
             <>
               <div
                 className="spinner-border mb-3"
                 role="status"
                 style={{ color: colors.greenD }}
               >
-                <span className="visually-hidden">Verifying…</span>
+                <span className="visually-hidden">Checking link…</span>
               </div>
               <p style={{ ...bodyTextStyle, fontSize: "1rem" }}>
-                Verifying your email address…
+                Checking your verification link…
               </p>
             </>
+          ) : isNeedsCode ? (
+            <div className="text-start">
+              <h1
+                className="fw-bold mb-2 text-center"
+                style={{ fontSize: "1.3rem", color: colors.greenD }}
+              >
+                Verify Your Email
+              </h1>
+              <p
+                className="mb-4 text-center"
+                style={{ ...bodyTextStyle, fontSize: "0.9rem" }}
+              >
+                Enter the 6-digit code we emailed you, then set the password
+                you'll use to log in.
+              </p>
+
+              {completeErrMsg && (
+                <div
+                  className="alert alert-danger py-2 mb-3"
+                  style={{ fontSize: "0.85rem" }}
+                  role="alert"
+                >
+                  {completeErrMsg}
+                  {completeStatus === "error" && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        style={{ fontSize: "0.85rem" }}
+                        onClick={handleResendCode}
+                        disabled={resendCodeStatus === "loading"}
+                      >
+                        {resendCodeStatus === "loading"
+                          ? "Sending new code…"
+                          : "Request a new code"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {resendCodeStatus === "sent" && !completeErrMsg && (
+                <div
+                  className="alert alert-success py-2 mb-3"
+                  style={{ fontSize: "0.85rem" }}
+                  role="status"
+                >
+                  A new code has been sent to your email.
+                </div>
+              )}
+
+              <form
+                onSubmit={handleCompleteSubmit}
+                className="d-flex flex-column gap-3"
+              >
+                <div>
+                  <label
+                    htmlFor="code"
+                    className="form-label fw-medium text-dark mb-1"
+                    style={{ fontSize: "0.9rem" }}
+                  >
+                    Verification Code:
+                  </label>
+                  <input
+                    id="code"
+                    name="code"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    className={`form-control signup-input rounded-3 text-center ${
+                      completeFieldErrors.code ? "is-invalid" : ""
+                    }`}
+                    placeholder="123456"
+                    style={{ ...inputStyle, letterSpacing: "0.4em" }}
+                    value={completeForm.code}
+                    onChange={handleCompleteChange}
+                    required
+                  />
+                  {completeFieldErrors.code && (
+                    <p className="text-danger small mt-1 mb-0">
+                      {completeFieldErrors.code}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="newPassword"
+                    className="form-label fw-medium text-dark mb-1"
+                    style={{ fontSize: "0.9rem" }}
+                  >
+                    New Password:
+                  </label>
+                  <div className="position-relative">
+                    <input
+                      id="newPassword"
+                      name="newPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      className={`form-control signup-input rounded-3 pe-5 ${
+                        completeFieldErrors.newPassword ? "is-invalid" : ""
+                      }`}
+                      style={inputStyle}
+                      value={completeForm.newPassword}
+                      onChange={handleCompleteChange}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      aria-label={
+                        showNewPassword ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showNewPassword ? (
+                        <EyeOff size={18} />
+                      ) : (
+                        <Eye size={18} />
+                      )}
+                    </button>
+                  </div>
+                  {completeFieldErrors.newPassword && (
+                    <p className="text-danger small mt-1 mb-0">
+                      {completeFieldErrors.newPassword}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="confirmNewPassword"
+                    className="form-label fw-medium text-dark mb-1"
+                    style={{ fontSize: "0.9rem" }}
+                  >
+                    Confirm New Password:
+                  </label>
+                  <div className="position-relative">
+                    <input
+                      id="confirmNewPassword"
+                      name="confirmNewPassword"
+                      type={showConfirmNewPassword ? "text" : "password"}
+                      className={`form-control signup-input rounded-3 pe-5 ${
+                        completeFieldErrors.confirmNewPassword
+                          ? "is-invalid"
+                          : ""
+                      }`}
+                      style={inputStyle}
+                      value={completeForm.confirmNewPassword}
+                      onChange={handleCompleteChange}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
+                      onClick={() => setShowConfirmNewPassword((v) => !v)}
+                      aria-label={
+                        showConfirmNewPassword
+                          ? "Hide password"
+                          : "Show password"
+                      }
+                    >
+                      {showConfirmNewPassword ? (
+                        <EyeOff size={18} />
+                      ) : (
+                        <Eye size={18} />
+                      )}
+                    </button>
+                  </div>
+                  {completeFieldErrors.confirmNewPassword && (
+                    <p className="text-danger small mt-1 mb-0">
+                      {completeFieldErrors.confirmNewPassword}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn w-100 text-white fw-bold text-uppercase rounded-3 py-2 signup-btn"
+                  style={{
+                    ...bodyTextStyle,
+                    marginTop: "0.25rem",
+                    height: "3.5rem",
+                    background: colors.greenL,
+                    fontSize: "0.9rem",
+                    letterSpacing: "0.06em",
+                    fontWeight: 600,
+                  }}
+                  disabled={completeStatus === "loading"}
+                >
+                  {completeStatus === "loading"
+                    ? "Activating…"
+                    : "Activate My Account"}
+                </button>
+              </form>
+            </div>
           ) : (
             <>
               <h1
                 className="fw-bold mb-3"
                 style={{
                   fontSize: "1.3rem",
-                  color: isSuccess ? colors.greenD : "#b02a37",
+                  color: isDone ? colors.greenD : "#b02a37",
                 }}
               >
-                {isSuccess ? "Email Verified" : "Verification Failed"}
+                {isSuccess
+                  ? "Account Activated"
+                  : isAlreadyVerified
+                    ? "Already Verified"
+                    : "Verification Failed"}
               </h1>
               <p
                 className="mb-4"
@@ -252,7 +756,7 @@ export default function Signup({ onNavigate }) {
                     sessionStorage.setItem(
                       "zw_verify_toast",
                       JSON.stringify({
-                        success: isSuccess,
+                        success: isDone,
                         message: verifyMessage,
                       }),
                     );
@@ -264,10 +768,11 @@ export default function Signup({ onNavigate }) {
                   setVerifyToken(null);
                   setVerifyStatus("idle");
                   setVerifyMessage("");
-                  onNavigate?.(isSuccess ? "login" : "signup");
+                  setCompleteForm(INITIAL_COMPLETE_FORM_STATE);
+                  onNavigate?.(isDone ? "login" : "signup");
                 }}
               >
-                {isSuccess ? "Go to Login" : "Back to Sign Up"}
+                {isDone ? "Go to Login" : "Back to Sign Up"}
               </button>
             </>
           )}

@@ -90,7 +90,7 @@ public class User {
     @Column(name = "donation_updates_enabled", columnDefinition = "boolean default true")
     private Boolean donationUpdatesEnabled = true;
 
-    // ── Email verification (required once, at first login only) ────────────
+    // ── Email verification (required once, at first login only) 
 
     /** True once the user has clicked the verification link from their signup email. */
     @Builder.Default
@@ -105,7 +105,7 @@ public class User {
     @Column(name = "verification_token_expires_at")
     private Instant verificationTokenExpiresAt;
 
-    // ── 2FA OTP fields ──────────────────────────────────────────────────────
+    // ── 2FA OTP fields 
     // - These fields are used for the 2FA OTP verification process. They are not used for regular authentication.
     /**
      * The 6-digit OTP currently pending verification (null when none).
@@ -127,4 +127,18 @@ public class User {
     @Builder.Default
     @Column(name = "pending_two_factor", columnDefinition = "boolean default false")
     private Boolean pendingTwoFactor = false;
+
+    // ── Forgot password 
+    // Kept separate from the otpCode/otpExpiresAt fields above (used by
+    // TwoFactorService and the registration-verification flow) so a
+    // password-reset request can never clobber an in-progress login-2FA OTP,
+    // or vice versa.
+
+    /** The 6-digit password-reset code currently pending (null when none). */
+    @Column(name = "reset_password_code", length = 6)
+    private String resetPasswordCode;
+
+    /** When the reset code expires (null when none is pending). */
+    @Column(name = "reset_password_code_expires_at")
+    private Instant resetPasswordCodeExpiresAt;
 }
