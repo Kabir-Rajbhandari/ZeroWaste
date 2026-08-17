@@ -11,6 +11,7 @@ import { logActivity } from "../../../utils/activitylog";
 
 const CATEGORIES = ["Dairy", "Meat", "Fruits", "Vegetable", "Other"];
 const UNITS = ["Kg", "Ltr", "Gram"];
+const STORAGE_LOCATIONS = ["Fridge", "Freezer", "Pantry", "Counter"];
 
 const inputStyle = {
   borderColor: colors.greenLrgb,
@@ -28,6 +29,8 @@ export default function EditFoodItem({ item, onSuccess, onCancel }) {
     quantityUnit: item.quantityUnit || "Kg",
     expiryDate: item.expiryDate ? item.expiryDate.split("T")[0] : "",
     imageUrl: item.imageUrl || "",
+    storageLocation: item.storageLocation || "",
+    notes: item.notes || "",
   });
   const [status, setStatus] = useState("idle");
   const [errMsg, setErrMsg] = useState("");
@@ -70,6 +73,8 @@ export default function EditFoodItem({ item, onSuccess, onCancel }) {
         quantityUnit: form.quantityUnit,
         expiryDate: form.expiryDate,
         imageUrl: form.imageUrl.trim() || null,
+        storageLocation: form.storageLocation || null,
+        notes: form.notes.trim() || null,
       });
       logActivity(`Updated ${form.name.trim()}`);
       setStatus("success");
@@ -251,6 +256,48 @@ export default function EditFoodItem({ item, onSuccess, onCancel }) {
               className="form-control"
               style={inputStyle}
               value={form.expiryDate}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="edit-storageLocation"
+              className="form-label fw-semibold small"
+            >
+              Storage <span className="text-muted fw-normal">(optional)</span>
+            </label>
+            <select
+              id="edit-storageLocation"
+              name="storageLocation"
+              className="form-select"
+              style={inputStyle}
+              value={form.storageLocation}
+              onChange={handleChange}
+            >
+              <option value="">Storage Location</option>
+              {STORAGE_LOCATIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="edit-notes"
+              className="form-label fw-semibold small"
+            >
+              Notes <span className="text-muted fw-normal">(optional)</span>
+            </label>
+            <textarea
+              id="edit-notes"
+              name="notes"
+              className="form-control"
+              style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
+              placeholder="Any remarks about this item…"
+              value={form.notes}
               onChange={handleChange}
             />
           </div>

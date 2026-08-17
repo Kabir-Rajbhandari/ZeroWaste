@@ -14,7 +14,6 @@ import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
 
-
 @Service
 public class UserService {
 
@@ -49,16 +48,12 @@ public class UserService {
         user.setGender(blankToNull(request.getGender()));
         user.setAddress(blankToNull(request.getAddress()));
         user.setHouseholdSize(normalizeHouseholdSize(request.getHouseholdSize()));
-        user.setProfileImageUrl(blankToNull(request.getProfileImageUrl()));
+        // profileImageUrl is intentionally untouched here — it's only ever
+        // set by updateProfileImage() below, via its own dedicated upload
+        // endpoint. See the note on UpdateProfileRequest for why.
 
         User saved = userRepository.save(user);
         return UserResponse.from(saved);
-    }
-
-    public UserResponse updateProfileImage(Long userId, String imageUrl) {
-        User user = findUser(userId);
-        user.setProfileImageUrl(blankToNull(imageUrl));
-        return UserResponse.from(userRepository.save(user));
     }
 
     /**
@@ -76,8 +71,8 @@ public class UserService {
 
     /**
      * Fetches the stored profile-image bytes for the given user, if any.
-     * Returns null when the user has no image on file (never uploaded one,
-     * or their only profileImageUrl is an external link they typed in).
+     * Returns null when the user has no image on file (never uploaded one, or
+     * their only profileImageUrl is an external link they typed in).
      */
     public ProfileImageStorageService.StoredImage getProfileImageBytes(Long userId) {
         User user = userRepository.findById(userId).orElse(null);
@@ -147,9 +142,7 @@ public class UserService {
         return UserResponse.from(saved);
     }
 
-    
     // For the protion of 2FA authentication, we will just toggle the boolean value for now. In a real-world application, you would implement a more robust 2FA system.
-    
     public void changePassword(Long userId, ChangePasswordRequest request) {
         User user = findUser(userId);
 
@@ -165,7 +158,6 @@ public class UserService {
                 "Your account password has been updated successfully.");
     }
 
-    
     private void notify(Long userId, String type, String category, String title, String message) {
         Notification notification = Notification.builder()
                 .userId(userId)
@@ -192,7 +184,6 @@ public class UserService {
         return value.trim();
     }
 
-
     private Integer normalizeHouseholdSize(Integer householdSize) {
         if (householdSize == null) {
             return null;
@@ -200,4 +191,3 @@ public class UserService {
         return Math.max(1, householdSize);
     }
 }
-

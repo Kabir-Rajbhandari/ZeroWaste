@@ -18,6 +18,8 @@ public class FoodItemResponse {
     private String quantityUnit;
     private LocalDate expiryDate;
     private String imageUrl;
+    private String storageLocation;
+    private String notes;
     private Boolean donated;
     private String donorName;
     private String donorProfileImageUrl;
@@ -54,6 +56,8 @@ public class FoodItemResponse {
                 item.getQuantityUnit(),
                 item.getExpiryDate(),
                 item.getImageUrl(),
+                item.getStorageLocation(),
+                item.getNotes(),
                 item.getDonated(),
                 donorName,
                 donorProfileImageUrl,

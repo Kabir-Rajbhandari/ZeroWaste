@@ -114,7 +114,13 @@ function getDisplayName(item) {
 }
 
 function getStorageTypeValue(item) {
-  return (item?.storageType || item?.storage_type || item?.storage || "")
+  return (
+    item?.storageLocation ||
+    item?.storageType ||
+    item?.storage_type ||
+    item?.storage ||
+    ""
+  )
     .toString()
     .trim();
 }

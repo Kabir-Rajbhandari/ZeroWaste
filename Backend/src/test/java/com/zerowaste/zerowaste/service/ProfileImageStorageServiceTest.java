@@ -1,10 +1,9 @@
 package com.zerowaste.zerowaste.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.nio.charset.StandardCharsets;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -41,6 +40,27 @@ class ProfileImageStorageServiceTest {
     void rejectsNonImageContentType() {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "notes.txt", "text/plain", "hello".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.readProfileImage(file))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void acceptsJpegContentType() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "photo.jpg", "image/jpeg", "jpeg-bytes".getBytes(StandardCharsets.UTF_8));
+
+        StoredImage stored = service.readProfileImage(file);
+
+        assertThat(stored.contentType()).isEqualTo("image/jpeg");
+    }
+
+    @Test
+    void rejectsImageTypesOutsideJpgJpegPng() {
+        // Only jpg/jpeg/png are accepted — gif, webp, svg, bmp, etc. are all
+        // still "image/*" but must be rejected per the exact requirement.
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "animated.gif", "image/gif", "gif-bytes".getBytes(StandardCharsets.UTF_8));
 
         assertThatThrownBy(() -> service.readProfileImage(file))
                 .isInstanceOf(ApiException.class);

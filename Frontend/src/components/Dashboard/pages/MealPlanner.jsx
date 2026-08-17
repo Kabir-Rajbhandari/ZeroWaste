@@ -420,8 +420,7 @@ export default function MealPlanner({
             borderRadius: 6,
           }}
         >
-          <CheckCircle2 size={18} />{" "}
-          {confirmingPlan ? "Confirming…" : "Confirm & Save Plan"}
+          <CheckCircle2 size={20} /> Confirm & Save Plan
         </button>
       </div>
 
@@ -432,15 +431,26 @@ export default function MealPlanner({
       )}
 
       {pendingPlanItem && (
-        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3">
+        <div
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3 "
+          style={{
+            border: `2px solid ${colors.greenLrgb}`,
+            background: colors.low_greenFade,
+          }}
+        >
           <span>
-            Planning a meal with <strong>{pendingPlanItem.name}</strong> — click
+            Planning a meal with <strong>{pendingPlanItem.name}</strong> - click
             a meal slot below to add it.
           </span>
           <button
             type="button"
             className="btn btn-link p-0"
-            style={{ fontSize: "0.85rem" }}
+            style={{
+              fontSize: "0.95rem",
+              textDecoration: "none",
+              fontWeight: 800,
+              color: colors.greenD,
+            }}
             onClick={() => {
               setDismissedInitialItemId(initialItem.id);
               onInitialItemConsumed?.();
@@ -452,15 +462,26 @@ export default function MealPlanner({
       )}
 
       {pendingMealName && (
-        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3">
+        <div
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3"
+          style={{
+            border: `2px solid ${colors.greenLrgb}`,
+            background: colors.low_greenFade,
+          }}
+        >
           <span>
-            Recipe selected: <strong>{pendingMealName}</strong> — click a meal
+            Recipe selected: <strong>{pendingMealName}</strong> - click a meal
             slot below to add it.
           </span>
           <button
             type="button"
             className="btn btn-link p-0"
-            style={{ fontSize: "0.85rem" }}
+            style={{
+              fontSize: "0.95rem",
+              textDecoration: "none",
+              fontWeight: 800,
+              color: colors.greenD,
+            }}
             onClick={() => setPendingMealName(null)}
           >
             Dismiss

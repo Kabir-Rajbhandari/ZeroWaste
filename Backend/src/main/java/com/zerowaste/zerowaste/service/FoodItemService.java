@@ -120,6 +120,8 @@ public class FoodItemService {
                 .quantityUnit(request.getQuantityUnit())
                 .expiryDate(request.getExpiryDate())
                 .imageUrl(blankToNull(request.getImageUrl()))
+                .storageLocation(blankToNull(request.getStorageLocation()))
+                .notes(blankToNull(request.getNotes()))
                 .userId(userId)
                 .build();
 
@@ -142,6 +144,8 @@ public class FoodItemService {
         item.setQuantityUnit(request.getQuantityUnit());
         item.setExpiryDate(request.getExpiryDate());
         item.setImageUrl(blankToNull(request.getImageUrl()));
+        item.setStorageLocation(blankToNull(request.getStorageLocation()));
+        item.setNotes(blankToNull(request.getNotes()));
 
         FoodItem savedItem = foodItemRepository.save(item);
         activityLogService.record(userId, "UPDATED", savedItem.getCategory(), savedItem.getName(),

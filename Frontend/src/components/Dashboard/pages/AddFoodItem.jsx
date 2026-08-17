@@ -148,7 +148,7 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
     if (!form.quantity.trim() || Number(form.quantity) <= 0)
       return setErrMsg("Enter a valid quantity.");
     if (!form.expiryDate) return setErrMsg("Expiry date is required.");
-    if (!form.storage) return setErrMsg("Please select a storage location.");
+    // Storage location is optional per the use case — no validation here.
 
     setErrMsg("");
     setStatus("loading");
@@ -161,6 +161,8 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
         quantityUnit: form.quantityUnit,
         expiryDate: form.expiryDate,
         imageUrl: uploadedImageData || form.imageUrl.trim() || null,
+        storageLocation: form.storage || null,
+        notes: form.notes.trim() || null,
       });
       logActivity(`Added ${form.name.trim()}`);
       resetForm();
@@ -338,7 +340,7 @@ export default function AddFoodItem({ onSuccess, onCancel }) {
 
             <div className="col-12 col-md-4">
               <label className="form-label" style={labelStyle}>
-                Storage
+                Storage (Optional)
               </label>
               <div className="position-relative">
                 <select
