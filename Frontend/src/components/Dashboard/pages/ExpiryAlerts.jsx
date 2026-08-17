@@ -9,13 +9,16 @@ const PAGE_SIZE = 8;
 
 function getDaysLeft(dateStr) {
   if (!dateStr) return null;
+
   const diff =
     new Date(dateStr).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0);
+
   return Math.round(diff / (1000 * 60 * 60 * 24));
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return "—";
+
   return new Date(dateStr).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
@@ -25,12 +28,14 @@ function formatDate(dateStr) {
 
 const FILTERS = ["All", "Expiring Soon", "Expired"];
 
-// Items expiring within 7 days (but not yet expired) count as "Expiring Soon"
+// Items expiring within 7 days (but not yet expired)
+// count as "Expiring Soon"
 function getStatus(daysLeft) {
   if (daysLeft === null) return null;
   if (daysLeft < 0) return "Expired";
   if (daysLeft <= 7) return "Expiring Soon";
-  return "Fresh";
+
+  return "More Than 7 Days Left";
 }
 
 export default function ExpiryAlerts() {
@@ -40,10 +45,12 @@ export default function ExpiryAlerts() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [donatingId, setDonatingId] = useState(null);
   const [page, setPage] = useState(1);
+  const [donateTarget, setDonateTarget] = useState(null);
 
   const loadItems = () => {
     setLoading(true);
     setError("");
+
     foodApi
       .getAll()
       .then((data) => setItems(Array.isArray(data) ? data : []))
@@ -55,42 +62,53 @@ export default function ExpiryAlerts() {
     loadItems();
   }, []);
 
-  const [donateTarget, setDonateTarget] = useState(null);
-
   const handleDonateConfirm = async (details) => {
     setDonatingId(donateTarget.id);
+
     try {
       await foodApi.donate(donateTarget.id, details);
+
       logActivity(`Donated ${donateTarget.name}`);
+
       setDonateTarget(null);
-      // Move the item into the "donated" pool on the backend; refresh this list.
+
+      // Move the item into the "donated" pool on the backend;
+      // refresh this list.
       loadItems();
     } finally {
       setDonatingId(null);
     }
   };
 
-  // Only show items that are expiring soon or already expired
+  // Calculate days left for every food item
   const alertItems = useMemo(() => {
     return items
-      .map((item) => ({ ...item, daysLeft: getDaysLeft(item.expiryDate) }))
-      .filter((item) => item.daysLeft !== null && item.daysLeft <= 7)
+      .map((item) => ({
+        ...item,
+        daysLeft: getDaysLeft(item.expiryDate),
+      }))
+      .filter((item) => item.daysLeft !== null)
       .sort((a, b) => a.daysLeft - b.daysLeft);
   }, [items]);
 
+  // Apply selected filter
   const filteredItems = useMemo(() => {
     if (activeFilter === "All") return alertItems;
+
     return alertItems.filter(
       (item) => getStatus(item.daysLeft) === activeFilter,
     );
   }, [alertItems, activeFilter]);
 
+  // Reset pagination when filter changes
   useEffect(() => {
     setPage(1);
   }, [activeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+
   const currentPage = Math.min(page, totalPages);
+
   const paginatedItems = filteredItems.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
@@ -98,22 +116,28 @@ export default function ExpiryAlerts() {
 
   return (
     <div>
+      {/* Header */}
       <div className="d-flex align-items-start justify-content-between mb-2 gap-3 flex-wrap">
         <div>
           <style>
             {`
-            .donate-btn {
-            opacity: 0.75;
-            transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-          }
+              .donate-btn {
+                opacity: 0.75;
+                transition:
+                  opacity 0.2s ease,
+                  background 0.25s ease,
+                  transform 0.25s ease,
+                  box-shadow 0.25s ease;
+              }
 
-          .donate-btn:hover:not(:disabled) {
-            opacity: 1;
-            transform: translateY(-1px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
-          }
-          `}
+              .donate-btn:hover:not(:disabled) {
+                opacity: 1;
+                transform: translateY(-1px);
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+              }
+            `}
           </style>
+
           <h1
             style={{
               fontFamily: fonts.body,
@@ -126,10 +150,18 @@ export default function ExpiryAlerts() {
           >
             Expiry Alerts
           </h1>
-          <p className="mb-0" style={{ color: colors.muted }}>
+
+          <p
+            className="mb-0"
+            style={{
+              color: colors.muted,
+            }}
+          >
             Never let good food go to waste with timely expiry reminders.
           </p>
         </div>
+
+        {/* Refresh Button */}
         <button
           type="button"
           className="btn btn-sm d-inline-flex align-items-center gap-2"
@@ -148,10 +180,11 @@ export default function ExpiryAlerts() {
         </button>
       </div>
 
-      {/* Filter tabs */}
+      {/* Filter Tabs */}
       <div className="d-flex gap-2 mb-4 mt-4">
         {FILTERS.map((f) => {
           const isActive = activeFilter === f;
+
           return (
             <button
               key={f}
@@ -175,11 +208,12 @@ export default function ExpiryAlerts() {
         })}
       </div>
 
+      {/* Error */}
       {error && (
         <div className="alert alert-danger py-2 small mb-4">{error}</div>
       )}
 
-      {/* Table card */}
+      {/* Table Card */}
       <div
         className="rounded-4 overflow-hidden"
         style={{
@@ -188,7 +222,12 @@ export default function ExpiryAlerts() {
         }}
       >
         {loading ? (
-          <div className="text-center py-5" style={{ color: colors.muted }}>
+          <div
+            className="text-center py-5"
+            style={{
+              color: colors.muted,
+            }}
+          >
             Loading alerts…
           </div>
         ) : filteredItems.length === 0 ? (
@@ -198,19 +237,49 @@ export default function ExpiryAlerts() {
               color={colors.border}
               className="mb-3 d-block mx-auto"
             />
-            <p className="mb-1 fw-semibold" style={{ color: colors.charcoal }}>
+
+            <p
+              className="mb-1 fw-semibold"
+              style={{
+                color: colors.charcoal,
+              }}
+            >
               {activeFilter === "All"
                 ? "All your food is fresh!"
                 : `No items with status "${activeFilter}"`}
             </p>
-            <p className="mb-0 small" style={{ color: colors.muted }}>
+
+            <p
+              className="mb-0 small"
+              style={{
+                color: colors.muted,
+              }}
+            >
               {activeFilter === "All" &&
                 "Items expiring within 7 days will appear here."}
             </p>
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="table align-middle mb-0">
+            <table
+              className="table align-middle mb-0"
+              style={{
+                width: "100%",
+                tableLayout: "fixed",
+                margin: 0,
+              }}
+            >
+              {/* Fixed Column Widths */}
+              <colgroup>
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "14%" }} />
+              </colgroup>
+
+              {/* Table Header */}
               <thead>
                 <tr
                   style={{
@@ -219,16 +288,63 @@ export default function ExpiryAlerts() {
                     color: colors.charcoal,
                   }}
                 >
-                  <th className="ps-4 py-3 border-0 fw-bold">Food Items</th>
-                  <th className="py-3 border-0 fw-bold">Category</th>
-                  <th className="py-3 border-0 fw-bold">Days Left</th>
-                  <th className="py-3 border-0 fw-bold">Expiry Date</th>
-                  <th className="py-3 border-0 fw-bold">Status</th>
-                  <th className="pe-4 py-3 border-0 fw-bold text-end">
+                  <th
+                    className="ps-4 py-3 border-0 fw-bold"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Food Items
+                  </th>
+
+                  <th
+                    className="py-3 border-0 fw-bold"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Category
+                  </th>
+
+                  <th
+                    className="py-3 border-0 fw-bold"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Days Left
+                  </th>
+
+                  <th
+                    className="py-3 border-0 fw-bold"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Expiry Date
+                  </th>
+
+                  <th
+                    className="py-3 border-0 fw-bold"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Status
+                  </th>
+
+                  <th
+                    className="pe-4 py-3 border-0 fw-bold text-end"
+                    style={{
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     Action
                   </th>
                 </tr>
               </thead>
+
+              {/* Table Body */}
               <tbody>
                 {paginatedItems.map((item, idx) => {
                   const status = getStatus(item.daysLeft);
@@ -248,39 +364,91 @@ export default function ExpiryAlerts() {
                           idx === 0 ? "none" : `2px solid ${colors.greenLrgb}`,
                       }}
                     >
-                      <td className="ps-4 py-3">
+                      {/* Food Item */}
+                      <td
+                        className="ps-4 py-3"
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         <span
                           className="fw-semibold"
-                          style={{ color: colors.charcoal }}
+                          style={{
+                            color: colors.charcoal,
+                          }}
                         >
                           {item.name}
                         </span>
                       </td>
-                      <td className="py-3" style={{ color: colors.charcoal }}>
+
+                      {/* Category */}
+                      <td
+                        className="py-3"
+                        style={{
+                          color: colors.charcoal,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {item.category}
                       </td>
-                      <td className="py-3" style={{ color: colors.charcoal }}>
+
+                      {/* Days Left */}
+                      <td
+                        className="py-3"
+                        style={{
+                          color: colors.charcoal,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {daysLabel}
                       </td>
-                      <td className="py-3" style={{ color: colors.charcoal }}>
+
+                      {/* Expiry Date */}
+                      <td
+                        className="py-3"
+                        style={{
+                          color: colors.charcoal,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {formatDate(item.expiryDate)}
                       </td>
-                      <td className="py-3">
+
+                      {/* Status */}
+                      <td
+                        className="py-3"
+                        style={{
+                          color: colors.charcoal,
+                          overflow: "hidden",
+                        }}
+                      >
                         <span
-                          className="px-3 py-2 rounded-5"
+                          className="px-3 py-2 rounded-3"
                           style={{
-                            background: isExpired ? "#BA5A5A" : colors.greenL,
+                            background: isExpired ? "#BA5A5A" : "#50C878",
                             color: colors.white,
-                            boxShadow: "0 0px 2px rgb(69, 68, 68)",
                             fontSize: "0.85rem",
                             fontWeight: 500,
                             display: "inline-block",
+                            whiteSpace: "nowrap",
+                            maxWidth: "100%",
                           }}
                         >
                           {status}
                         </span>
                       </td>
-                      <td className="pe-4 py-3 text-end">
+
+                      {/* Action */}
+                      <td
+                        className="pe-4 py-3 text-end"
+                        style={{
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {isExpired ? (
                           <span
                             style={{
@@ -322,6 +490,7 @@ export default function ExpiryAlerts() {
         )}
       </div>
 
+      {/* Pagination */}
       {!loading && filteredItems.length > 0 && totalPages > 1 && (
         <div className="d-flex align-items-center justify-content-end gap-3 mt-4">
           <button
@@ -338,9 +507,16 @@ export default function ExpiryAlerts() {
           >
             <ChevronsLeft size={20} />
           </button>
-          <span className="fw-semibold" style={{ color: colors.charcoal }}>
+
+          <span
+            className="fw-semibold"
+            style={{
+              color: colors.charcoal,
+            }}
+          >
             {currentPage}
           </span>
+
           <button
             type="button"
             className="btn btn-sm p-1"
@@ -359,6 +535,7 @@ export default function ExpiryAlerts() {
         </div>
       )}
 
+      {/* Donate Modal */}
       <DonateModal
         item={donateTarget}
         onCancel={() => setDonateTarget(null)}

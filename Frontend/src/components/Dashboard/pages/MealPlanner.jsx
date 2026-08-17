@@ -68,7 +68,10 @@ function daysUntilExpiry(dateStr) {
   return Math.round((expiry - today) / 86400000);
 }
 
-export default function MealPlanner() {
+export default function MealPlanner({
+  initialItem,
+  onInitialItemConsumed,
+} = {}) {
   const [viewMode, setViewMode] = useState("week");
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [meals, setMeals] = useState({});
@@ -78,6 +81,18 @@ export default function MealPlanner() {
   const [linkedItemId, setLinkedItemId] = useState("");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [statusMessage, setStatusMessage] = useState("");
+  const [confirmingPlan, setConfirmingPlan] = useState(false);
+
+  // Track whether the user has dismissed the pending item banner
+  const [dismissedInitialItemId, setDismissedInitialItemId] = useState(null);
+
+  // Derived value instead of syncing props into state via an effect
+  const pendingPlanItem =
+    initialItem && initialItem.id !== dismissedInitialItemId
+      ? initialItem
+      : null;
+
+  const [pendingMealName, setPendingMealName] = useState(null);
 
   const sortedInventory = useMemo(() => {
     return [...inventoryItems].sort((a, b) => {
@@ -91,11 +106,7 @@ export default function MealPlanner() {
     1,
     Math.ceil(sortedInventory.length / INVENTORY_PAGE_SIZE),
   );
-  // Clamped directly during render instead of "fixed up" afterward via an
-  // effect + setState — if the list shrinks and inventoryPage is now out of
-  // range, this just computes the right page on the spot rather than
-  // rendering once with a stale page and then re-rendering after an effect
-  // corrects it.
+
   const currentInventoryPage = Math.min(inventoryPage, inventoryTotalPages);
   const paginatedInventory = sortedInventory.slice(
     (currentInventoryPage - 1) * INVENTORY_PAGE_SIZE,
@@ -145,9 +156,6 @@ export default function MealPlanner() {
     return days;
   }, [monthStart]);
 
-  // Union of every date currently on screen (week grid + month grid, whose
-  // ranges don't always coincide near a month boundary), so one fetch covers
-  // whichever view the user is looking at.
   const visibleRange = useMemo(() => {
     const candidates = [...weekDays, ...monthDays.filter(Boolean)];
     const start = candidates.reduce((min, d) => (d < min ? d : min));
@@ -158,22 +166,26 @@ export default function MealPlanner() {
   const rangeStartKey = dayKey(visibleRange.start);
   const rangeEndKey = dayKey(visibleRange.end);
 
+  const loadMealsForRange = async (startKey, endKey) => {
+    const data = await mealPlanApi.getRange(startKey, endKey);
+    const dict = {};
+    (Array.isArray(data) ? data : []).forEach((plan) => {
+      dict[`${plan.mealDate}_${plan.mealType}`] = {
+        name: plan.name || "",
+        linkedItem: plan.linkedFoodItemName || "",
+        linkedFoodItemId: plan.linkedFoodItemId || null,
+        planId: plan.id,
+      };
+    });
+    return dict;
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await mealPlanApi.getRange(rangeStartKey, rangeEndKey);
-        if (cancelled) return;
-        const dict = {};
-        (Array.isArray(data) ? data : []).forEach((plan) => {
-          dict[`${plan.mealDate}_${plan.mealType}`] = {
-            name: plan.name || "",
-            linkedItem: plan.linkedFoodItemName || "",
-            linkedFoodItemId: plan.linkedFoodItemId || null,
-            planId: plan.id,
-          };
-        });
-        setMeals(dict);
+        const dict = await loadMealsForRange(rangeStartKey, rangeEndKey);
+        if (!cancelled) setMeals(dict);
       } catch {
         if (!cancelled) setMeals({});
       }
@@ -223,8 +235,29 @@ export default function MealPlanner() {
   const openEditModal = (date, meal) => {
     const k = `${dayKey(date)}_${meal}`;
     const data = getMealData(date, meal);
-    setMealName(data.name || "");
-    setLinkedItemId(data.linkedFoodItemId ? String(data.linkedFoodItemId) : "");
+    const prefillName =
+      !data.name && pendingMealName ? pendingMealName : data.name || "";
+    setMealName(prefillName);
+
+    const preselectedId =
+      !data.linkedFoodItemId && pendingPlanItem ? pendingPlanItem.id : null;
+    setLinkedItemId(
+      data.linkedFoodItemId
+        ? String(data.linkedFoodItemId)
+        : preselectedId
+          ? String(preselectedId)
+          : "",
+    );
+
+    if (!data.name && pendingMealName) {
+      setPendingMealName(null);
+    }
+
+    if (preselectedId) {
+      setDismissedInitialItemId(initialItem.id);
+      onInitialItemConsumed?.();
+    }
+
     setActiveModal({
       key: k,
       date,
@@ -263,8 +296,6 @@ export default function MealPlanner() {
         return updated;
       });
 
-      // Reflect the new reservation on the inventory panel right away
-      // instead of waiting for the next full refetch.
       if (parsedLinkedId) {
         setInventoryItems((prev) =>
           prev.map((item) =>
@@ -300,12 +331,25 @@ export default function MealPlanner() {
     }
   };
 
-  const handleConfirmWeeklyPlan = () => {
-    logActivity("Confirmed weekly meal plan & scheduled reminders");
-    setStatusMessage(
-      "Weekly plan saved successfully! Reserved inventory and scheduled meal reminders.",
-    );
-    setTimeout(() => setStatusMessage(""), 4000);
+  const handleConfirmWeeklyPlan = async () => {
+    setConfirmingPlan(true);
+    setStatusMessage("");
+    try {
+      const dict = await loadMealsForRange(rangeStartKey, rangeEndKey);
+      setMeals(dict);
+      logActivity("Confirmed weekly meal plan & scheduled reminders");
+      setStatusMessage(
+        "Weekly plan confirmed! Ingredients are reserved and reminders are scheduled for the evening before each meal.",
+      );
+    } catch (err) {
+      setStatusMessage(
+        err.message ||
+          "Couldn't verify your weekly plan with the server. Please check your connection and try again.",
+      );
+    } finally {
+      setConfirmingPlan(false);
+      setTimeout(() => setStatusMessage(""), 5000);
+    }
   };
 
   const today = dayKey(new Date());
@@ -366,6 +410,7 @@ export default function MealPlanner() {
           type="button"
           className="btn d-inline-flex align-items-center gap-2"
           onClick={handleConfirmWeeklyPlan}
+          disabled={confirmingPlan}
           style={{
             ...btnPrimaryStyle,
             color: colors.white,
@@ -375,7 +420,7 @@ export default function MealPlanner() {
             borderRadius: 6,
           }}
         >
-          <CheckCircle2 size={18} /> Confirm & Save Plan
+          <CheckCircle2 size={20} /> Confirm & Save Plan
         </button>
       </div>
 
@@ -385,7 +430,66 @@ export default function MealPlanner() {
         </div>
       )}
 
-      <SuggestedMeals />
+      {pendingPlanItem && (
+        <div
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3 "
+          style={{
+            border: `2px solid ${colors.greenLrgb}`,
+            background: colors.low_greenFade,
+          }}
+        >
+          <span>
+            Planning a meal with <strong>{pendingPlanItem.name}</strong> - click
+            a meal slot below to add it.
+          </span>
+          <button
+            type="button"
+            className="btn btn-link p-0"
+            style={{
+              fontSize: "0.95rem",
+              textDecoration: "none",
+              fontWeight: 800,
+              color: colors.greenD,
+            }}
+            onClick={() => {
+              setDismissedInitialItemId(initialItem.id);
+              onInitialItemConsumed?.();
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {pendingMealName && (
+        <div
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3"
+          style={{
+            border: `2px solid ${colors.greenLrgb}`,
+            background: colors.low_greenFade,
+          }}
+        >
+          <span>
+            Recipe selected: <strong>{pendingMealName}</strong> - click a meal
+            slot below to add it.
+          </span>
+          <button
+            type="button"
+            className="btn btn-link p-0"
+            style={{
+              fontSize: "0.95rem",
+              textDecoration: "none",
+              fontWeight: 800,
+              color: colors.greenD,
+            }}
+            onClick={() => setPendingMealName(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <SuggestedMeals onUseRecipe={(name) => setPendingMealName(name)} />
 
       {/* Inventory Panel */}
       {inventoryItems.length > 0 && (

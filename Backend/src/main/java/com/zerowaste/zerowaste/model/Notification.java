@@ -7,6 +7,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,9 +16,23 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
-@Table(name = "notifications")
+@Table(
+        name = "notifications",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uk_notification_expiry_alert",
+                    columnNames = {
+                        "user_id",
+                        "type",
+                        "food_item_id",
+                        "expiry_alert_date"
+                    }
+            )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,18 +44,26 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Recipient of this notification.
+    /**
+     * User who receives the notification.
+     */
     @Column(nullable = false)
     private Long userId;
 
-    // DONATION_REQUEST, DONATION_ACCEPTED, DONATION_DECLINED,
-    // PRIVACY_PUBLIC, PRIVACY_PRIVATE, EXPIRY_ALERTS_ON, EXPIRY_ALERTS_OFF,
-    // TWO_FACTOR_ON, TWO_FACTOR_OFF
+    /**
+     * Notification type.
+     *
+     * Examples: DONATION_REQUEST DONATION_ACCEPTED DONATION_DECLINED
+     * NEW_DONATION EXPIRY_ALERT
+     */
     @Column(nullable = false)
     private String type;
 
-    // Alerts, Donations, Reminders, System — matches the filter tabs on the
-    // Notifications page.
+    /**
+     * Notification category.
+     *
+     * Examples: Alerts Donations Reminders System
+     */
     @Column(nullable = false)
     private String category;
 
@@ -53,18 +77,45 @@ public class Notification {
     @Column(nullable = false)
     private Boolean read = false;
 
-    // Set only on DONATION_REQUEST notifications so the donor's Accept/Decline
-    // buttons know which DonationClaimRequest to act on.
+    /**
+     * Used by donation request notifications.
+     */
     private Long claimRequestId;
 
-    // Snapshot fields so the Accept/Decline card can be rendered without an
-    // extra lookup — who asked, and for what item.
+    /**
+     * Snapshot of requester name at notification creation time.
+     */
     private String requesterName;
+
+    /**
+     * Snapshot of food item name at notification creation time.
+     */
     private String itemName;
 
-    // For DONATION_REQUEST notifications: true once the donor has accepted or
-    // declined it (so the buttons stop being shown). Always true for
-    // non-actionable notification types.
+    /**
+     * Food item that generated the notification.
+     *
+     * Used by expiry notifications. Other notification types may leave this
+     * null.
+     */
+    @Column(name = "food_item_id")
+    private Long foodItemId;
+
+    /**
+     * Calendar date on which this expiry notification was generated.
+     *
+     * Used together with userId + type + foodItemId to prevent duplicate expiry
+     * notifications on the same day.
+     */
+    @Column(name = "expiry_alert_date")
+    private LocalDate expiryAlertDate;
+
+    /**
+     * Whether the notification has been resolved.
+     *
+     * Expiry notifications are informational, so they are immediately
+     * considered resolved.
+     */
     @Builder.Default
     @Column(nullable = false)
     private Boolean resolved = false;

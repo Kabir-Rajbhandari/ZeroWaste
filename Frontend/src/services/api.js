@@ -124,6 +124,65 @@ export const authApi = {
       body: JSON.stringify({ email }),
     });
   },
+
+  register(payload) {
+    return request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // UC1, step 2: Privacy & Security Configuration — its own step right
+  // after registration, before the verification email goes out.
+  configureSecurity({ email, donationPublic, enableTwoFactor }) {
+    return request("/api/auth/configure-security", {
+      method: "POST",
+      body: JSON.stringify({ email, donationPublic, enableTwoFactor }),
+    });
+  },
+
+  // UC1, step 3: read-only check fired the moment the confirmation link
+  // loads — does not activate the account.
+  checkVerificationToken(token) {
+    return request(
+      `/api/auth/verify-email/status?token=${encodeURIComponent(token)}`,
+      { method: "GET" },
+    );
+  },
+
+  // UC1, step 3 (continued): "the user enters the verification code and
+  // sets a new password" → activates the account.
+  completeRegistration({ token, code, newPassword, confirmNewPassword }) {
+    return request("/api/auth/complete-registration", {
+      method: "POST",
+      body: JSON.stringify({ token, code, newPassword, confirmNewPassword }),
+    });
+  },
+
+  // Alt-flow Line 6: invalid/expired code → request a fresh one via the
+  // token already in the URL (no email re-entry needed).
+  resendCode(token) {
+    return request("/api/auth/resend-code", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+  },
+
+  // Forgot Password, step 1: request a 6-digit reset code by email.
+  forgotPassword(email) {
+    return request("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  // Forgot Password, step 2: submit the code + new password.
+  resetPassword({ email, code, newPassword, confirmNewPassword }) {
+    return request("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, code, newPassword, confirmNewPassword }),
+    });
+  },
 };
 
 export const userApi = {

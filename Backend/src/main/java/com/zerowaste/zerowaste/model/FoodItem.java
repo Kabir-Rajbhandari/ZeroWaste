@@ -45,6 +45,19 @@ public class FoodItem {
     @Column(columnDefinition = "TEXT")
     private String imageUrl;
 
+    /**
+     * Optional per the use case ("Storage location (optional)") — e.g. Fridge,
+     * Freezer, Pantry.
+     */
+    @Column(name = "storage_location")
+    private String storageLocation;
+
+    /**
+     * Optional free-text remarks/notes entered on the Add/Edit Food Item form.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String notes;
+
     @Column(nullable = false)
     private Long userId;
 

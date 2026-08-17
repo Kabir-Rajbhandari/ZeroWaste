@@ -574,6 +574,15 @@ export default function FoodInventory({ onNavigate }) {
                         <button
                           type="button"
                           className="btn btn-link p-0 action-icon-btn"
+                          style={{ color: colors.greenL }}
+                          onClick={() => onNavigate?.("meal-planner", item)}
+                          title="Plan for Meal"
+                        >
+                          <UtensilsCrossed size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-link p-0 action-icon-btn"
                           style={{ color: "#c0392b" }}
                           onClick={() => handleDelete(item.id)}
                           title="Delete"
@@ -654,7 +663,7 @@ export default function FoodInventory({ onNavigate }) {
             style={{
               color: currentPage === 1 ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
@@ -672,7 +681,7 @@ export default function FoodInventory({ onNavigate }) {
               color:
                 currentPage === totalPages ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}

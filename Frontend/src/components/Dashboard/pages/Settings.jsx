@@ -5,6 +5,11 @@ import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { resolveAssetUrl, userApi } from "../../../services/api";
 import { getStoredUser, setStoredUser } from "../../../utils/auth";
 
+// Matches the backend's ProfileImageStorageService validation exactly —
+// keep these two in sync.
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png"];
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
 const inputStyle = {
   borderColor: colors.greenLrgb,
   borderWidth: "2px",
@@ -379,6 +384,11 @@ export default function Settings({ onProfileUpdated }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState({ type: "", text: "" });
   const fileInputRef = useRef(null);
+  // Staged locally on file select — NOT uploaded until "Save Changes" is
+  // clicked. selectedImageFile is the raw File to upload; imagePreviewUrl is
+  // a local blob: URL so the avatar updates instantly without a round-trip.
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
 
   // ---- Privacy ----
   const [donationPublic, setDonationPublic] = useState(true);
@@ -450,6 +460,14 @@ export default function Settings({ onProfileUpdated }) {
   }, []);
 
   // ── Profile ────────────────────────────────────────────────────────────────
+  // Revoke the blob: URL whenever it's replaced or the component unmounts,
+  // so we don't leak memory across repeated photo selections.
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    };
+  }, [imagePreviewUrl]);
+
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfile((prev) => ({ ...prev, [name]: value }));
@@ -469,7 +487,7 @@ export default function Settings({ onProfileUpdated }) {
     setSavingProfile(true);
     setProfileMsg({ type: "", text: "" });
     try {
-      const updated = await userApi.updateProfile({
+      let updated = await userApi.updateProfile({
         fullName: profile.fullName.trim(),
         email: profile.email.trim(),
         gender: profile.gender.trim(),
@@ -477,6 +495,16 @@ export default function Settings({ onProfileUpdated }) {
         householdSize:
           profile.householdSize === "" ? null : Number(profile.householdSize),
       });
+
+      // If the user picked a new photo, this is the moment it actually
+      // uploads — everything up to here was just a local preview.
+      if (selectedImageFile) {
+        updated = await userApi.updateProfileImage(selectedImageFile);
+        if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+        setSelectedImageFile(null);
+        setImagePreviewUrl(null);
+      }
+
       setProfile({
         fullName: updated.fullName || "",
         email: updated.email || "",
@@ -484,11 +512,15 @@ export default function Settings({ onProfileUpdated }) {
         address: updated.address || "",
         householdSize:
           updated.householdSize == null ? "" : String(updated.householdSize),
-        profileImageUrl: updated.profileImageUrl || profile.profileImageUrl,
+        profileImageUrl: updated.profileImageUrl || "",
       });
       const cached = getStoredUser();
       setStoredUser({ ...cached, ...updated });
       setProfileMsg({ type: "success", text: "Profile updated successfully." });
+      // Fires once, after both the field update and (if any) the image
+      // upload have both landed — the dashboard header avatar picks up the
+      // final state in a single refresh instead of flickering through an
+      // intermediate one.
       onProfileUpdated?.();
     } catch (err) {
       setProfileMsg({
@@ -631,29 +663,38 @@ export default function Settings({ onProfileUpdated }) {
     }
   };
 
-  const handleProfileImageUpload = async (event) => {
+  // Runs on file SELECT only — validates the file and shows a local preview.
+  // The actual upload happens inside handleSaveProfile() above, when the
+  // user clicks "Save Changes".
+  const handleProfileImageUpload = (event) => {
     const file = event.target.files?.[0];
+    // Let the user pick the same file again later (e.g. after cancelling)
+    // by clearing the input's value now, regardless of outcome below.
+    event.target.value = "";
     if (!file) return;
 
-    try {
-      const updated = await userApi.updateProfileImage(file);
-      setProfile((prev) => ({
-        ...prev,
-        profileImageUrl: updated.profileImageUrl || "",
-      }));
-      const cached = getStoredUser();
-      setStoredUser({
-        ...cached,
-        profileImageUrl: updated.profileImageUrl || "",
-      });
-      setProfileMsg({ type: "success", text: "Profile picture updated." });
-      onProfileUpdated?.();
-    } catch (err) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       setProfileMsg({
         type: "danger",
-        text: err.message || "Failed to upload profile picture.",
+        text: "Only JPG, JPEG, or PNG images are allowed.",
       });
+      return;
     }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setProfileMsg({
+        type: "danger",
+        text: "Profile image must be smaller than 5MB.",
+      });
+      return;
+    }
+
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setSelectedImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setProfileMsg({
+      type: "success",
+      text: 'Photo selected — click "Save Changes" to upload it.',
+    });
   };
 
   // ── Password modal ─────────────────────────────────────────────────────────
@@ -770,9 +811,12 @@ export default function Settings({ onProfileUpdated }) {
                   cursor: "pointer",
                 }}
               >
-                {profile.profileImageUrl ? (
+                {imagePreviewUrl || profile.profileImageUrl ? (
                   <img
-                    src={resolveAssetUrl(profile.profileImageUrl)}
+                    src={
+                      imagePreviewUrl ||
+                      resolveAssetUrl(profile.profileImageUrl)
+                    }
                     alt="Profile"
                     style={{
                       width: "100%",
@@ -788,7 +832,7 @@ export default function Settings({ onProfileUpdated }) {
                 ref={fileInputRef}
                 id="profile-image-upload"
                 type="file"
-                accept="image/*"
+                accept="image/png, image/jpeg"
                 style={{ display: "none" }}
                 onChange={handleProfileImageUpload}
               />
@@ -808,6 +852,12 @@ export default function Settings({ onProfileUpdated }) {
                   Upload photo
                 </button>
               </div>
+              {selectedImageFile && (
+                <p className="small mt-2 mb-0" style={{ color: colors.muted }}>
+                  {selectedImageFile.name} selected — click{" "}
+                  <strong>Save Changes</strong> below to upload it.
+                </p>
+              )}
             </div>
 
             {profileMsg.text && (

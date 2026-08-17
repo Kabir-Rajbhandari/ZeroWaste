@@ -9,19 +9,22 @@ import org.springframework.web.multipart.MultipartFile;
 import com.zerowaste.zerowaste.exception.ApiException;
 
 /**
- * Validates and reads uploaded profile-image files into memory so they can
- * be persisted straight into the database (see User.profileImageData) rather
- * than written to the local disk. Storing on local disk doesn't survive
- * redeploys/restarts and doesn't work once you run more than one app
- * instance, so the image bytes themselves are the source of truth in the DB.
+ * Validates and reads uploaded profile-image files into memory
  */
 @Service
 public class ProfileImageStorageService {
 
     private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024; // 5MB
 
-    /** In-memory representation of an uploaded image, ready to be saved to the DB. */
+    private static final java.util.Set<String> ALLOWED_CONTENT_TYPES = java.util.Set.of(
+            "image/jpeg", "image/jpg", "image/png");
+
+    /**
+     * In-memory representation of an uploaded image, ready to be saved to the
+     * DB.
+     */
     public record StoredImage(byte[] data, String contentType) {
+
     }
 
     public StoredImage readProfileImage(MultipartFile file) {
@@ -33,8 +36,9 @@ public class ProfileImageStorageService {
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
-            throw new ApiException("Only image files are allowed for profile pictures.", HttpStatus.BAD_REQUEST);
+        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase())) {
+            throw new ApiException(
+                    "Only JPG, JPEG, or PNG images are allowed for profile pictures.", HttpStatus.BAD_REQUEST);
         }
 
         try {

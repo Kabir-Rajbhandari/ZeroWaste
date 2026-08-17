@@ -13,6 +13,7 @@ import {
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi, resolveAssetUrl } from "../../../services/api";
 import { logActivity } from "../../../utils/activitylog";
+import DonateModal from "../DonateModal";
 
 const CATEGORIES = [
   "All Categories",
@@ -113,12 +114,18 @@ function getDisplayName(item) {
 }
 
 function getStorageTypeValue(item) {
-  return (item?.storageType || item?.storage_type || item?.storage || "")
+  return (
+    item?.storageLocation ||
+    item?.storageType ||
+    item?.storage_type ||
+    item?.storage ||
+    ""
+  )
     .toString()
     .trim();
 }
 
-export default function BrowseFoodItem() {
+export default function BrowseFoodItem({ onNavigate }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All Categories");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -135,6 +142,24 @@ export default function BrowseFoodItem() {
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState("");
   const [donorAvatarError, setDonorAvatarError] = useState(false);
+
+  // UC3, "Decide What to Do With the Food": Mark as Used / Plan for Meal /
+  // Flag for Donation — the three actions available on an item the user
+  // owns, reachable right from its detail view here in Browse Food Items.
+  const [donateTarget, setDonateTarget] = useState(null);
+  const [confirmingUsed, setConfirmingUsed] = useState(false);
+  const [markingUsed, setMarkingUsed] = useState(false);
+  const [actionErr, setActionErr] = useState("");
+
+  const refreshItems = async () => {
+    try {
+      const data = await foodApi.browse();
+      setItems(Array.isArray(data) ? data : []);
+    } catch {
+      // Non-critical: the action itself already succeeded: the list will
+      // just stay slightly stale until the next natural reload.
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -249,6 +274,53 @@ export default function BrowseFoodItem() {
     setShowContact(false);
     setClaimMsg("");
     setDonorAvatarError(false);
+    setConfirmingUsed(false);
+    setActionErr("");
+  };
+
+  // Branch A — Mark as Used: updates the item's status and contributes to
+  // the user's food-saving/impact records (logged server-side as a "USED"
+  // activity, which Analytics reads from directly).
+  const handleMarkUsed = async () => {
+    if (!selectedItem) return;
+    setMarkingUsed(true);
+    setActionErr("");
+    try {
+      await foodApi.markUsed(selectedItem.id);
+      if (typeof logActivity === "function") {
+        logActivity(`Used ${selectedItem.name}`);
+      }
+      setItems((prev) => prev.filter((i) => i.id !== selectedItem.id));
+      setSelectedItem(null);
+      setConfirmingUsed(false);
+      await refreshItems();
+    } catch (err) {
+      setActionErr(err.message || "Failed to mark item as used.");
+    } finally {
+      setMarkingUsed(false);
+    }
+  };
+
+  // Branch B — Plan for Meal: hands the item off to Meal Planner so it's
+  // available to link into a meal slot there.
+  const handlePlanForMeal = () => {
+    if (!selectedItem) return;
+    onNavigate?.("meal-planner", selectedItem);
+  };
+
+  // Branch C — Flag for Donation: prompts for pickup location + availability
+  // (via the same DonateModal used from Food Inventory), then creates the
+  // donation listing.
+  const handleDonateConfirm = async (details) => {
+    if (!donateTarget) return;
+    await foodApi.donate(donateTarget.id, details);
+    if (typeof logActivity === "function") {
+      logActivity(`Donated ${donateTarget.name}`);
+    }
+    setItems((prev) => prev.filter((i) => i.id !== donateTarget.id));
+    setDonateTarget(null);
+    setSelectedItem(null);
+    await refreshItems();
   };
 
   const handleClaim = async () => {
@@ -564,12 +636,108 @@ export default function BrowseFoodItem() {
                 </div>
               )}
 
+              {actionErr && (
+                <div className="alert alert-danger py-2 small mt-3 mb-0">
+                  {actionErr}
+                </div>
+              )}
+
               {selectedItem.isOwn ? (
-                <div className="alert alert-info py-2 small mt-4 mb-0">
-                  This is your own listing —{" "}
-                  {selectedItem.donorPublic === false
-                    ? "it's currently private."
-                    : "it's public for community browsing."}
+                <div className="mt-4">
+                  <p className="small mb-3" style={{ color: colors.muted }}>
+                    This is your own listing —{" "}
+                    {selectedItem.donorPublic === false
+                      ? "it's currently private."
+                      : "it's public for community browsing."}
+                  </p>
+
+                  {confirmingUsed ? (
+                    <div className="d-flex align-items-center gap-3 flex-wrap">
+                      <span
+                        className="small fw-medium"
+                        style={{ color: colors.charcoal }}
+                      >
+                        Mark "{selectedItem.name}" as used?
+                      </span>
+                      <button
+                        type="button"
+                        className="btn px-3"
+                        style={{
+                          ...btnPrimaryStyle,
+                          borderRadius: 6,
+                          fontWeight: 600,
+                          padding: "0.4rem 1rem",
+                          fontSize: "0.85rem",
+                          color: colors.white,
+                        }}
+                        onClick={handleMarkUsed}
+                        disabled={markingUsed}
+                      >
+                        {markingUsed ? "Saving…" : "Yes, mark used"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        style={{ fontSize: "0.85rem", color: colors.muted }}
+                        onClick={() => setConfirmingUsed(false)}
+                        disabled={markingUsed}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="d-flex justify-content-end gap-3 flex-wrap">
+                      <button
+                        type="button"
+                        className="btn px-4"
+                        style={{
+                          opacity: 0.85,
+                          borderColor: colors.green,
+                          color: colors.charcoal,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          borderWidth: "2px",
+                          padding: "0.45rem 1.15rem",
+                          fontSize: "0.9rem",
+                        }}
+                        onClick={() => setConfirmingUsed(true)}
+                      >
+                        Mark as Used
+                      </button>
+                      <button
+                        type="button"
+                        className="btn px-4"
+                        style={{
+                          opacity: 0.85,
+                          borderColor: colors.green,
+                          color: colors.charcoal,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          borderWidth: "2px",
+                          padding: "0.45rem 1.15rem",
+                          fontSize: "0.9rem",
+                        }}
+                        onClick={handlePlanForMeal}
+                      >
+                        Plan for Meal
+                      </button>
+                      <button
+                        type="button"
+                        className="btn px-4"
+                        style={{
+                          ...btnPrimaryStyle,
+                          borderRadius: 6,
+                          fontWeight: 600,
+                          padding: "0.45rem 1.15rem",
+                          fontSize: "0.9rem",
+                          color: colors.white,
+                        }}
+                        onClick={() => setDonateTarget(selectedItem)}
+                      >
+                        Flag for Donation
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="d-flex justify-content-end gap-3 mt-4">
@@ -613,6 +781,14 @@ export default function BrowseFoodItem() {
             </div>
           </div>
         </div>
+
+        {donateTarget && (
+          <DonateModal
+            item={donateTarget}
+            onCancel={() => setDonateTarget(null)}
+            onConfirm={handleDonateConfirm}
+          />
+        )}
       </div>
     );
   }
@@ -1085,7 +1261,7 @@ export default function BrowseFoodItem() {
             style={{
               color: currentPage === 1 ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
@@ -1094,7 +1270,7 @@ export default function BrowseFoodItem() {
             <ChevronsLeft size={20} />
           </button>
           <span className="fw-semibold" style={{ color: colors.charcoal }}>
-            {currentPage} of {totalPages}
+            {currentPage}
           </span>
           <button
             type="button"
@@ -1103,7 +1279,7 @@ export default function BrowseFoodItem() {
               color:
                 currentPage === totalPages ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}

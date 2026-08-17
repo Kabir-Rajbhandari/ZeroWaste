@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Bell,
   Clock,
+  ChartBar,
 } from "lucide-react";
 import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
 import { analyticsApi, foodApi } from "../../../services/api";
@@ -366,6 +367,7 @@ export default function DashboardHome({ onNavigate }) {
     { label: "Browse Food", icon: Search, to: "browse" },
     { label: "Meal Planner", icon: CalendarDays, to: "meal-planner" },
     { label: "Expiry Alerts", icon: Bell, to: "expiry" },
+    { label: "Track & Report", icon: ChartBar, to: "analytics" },
   ];
 
   return (
