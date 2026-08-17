@@ -15,34 +15,31 @@ import { notificationApi } from "../../services/api";
 export default function Dashboard({ onNavigate }) {
   const [activePage, setActivePage] = useState("overview");
   const [editingItem, setEditingItem] = useState(null);
+
+  const [mealPlannerItem, setMealPlannerItem] = useState(null);
+
   const [profileVersion, setProfileVersion] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  const refreshUnreadCount = async () => {
-    try {
-      const data = await notificationApi.getUnreadCount();
-      setUnreadCount(data?.count || 0);
-    } catch {
-      // Non-critical — badge just stays at its last known value.
-    }
-  };
 
   useEffect(() => {
     if (activePage === "notifications") return;
 
     let isMounted = true;
+
     const loadUnreadCount = async () => {
       try {
         const data = await notificationApi.getUnreadCount();
+
         if (isMounted) {
           setUnreadCount(data?.count || 0);
         }
       } catch {
-        // Non-critical — badge just stays at its last known value.
+        // Non-critical.
       }
     };
 
     loadUnreadCount();
+
     const intervalId = window.setInterval(loadUnreadCount, 15000);
 
     return () => {
@@ -62,9 +59,15 @@ export default function Dashboard({ onNavigate }) {
 
   const handleNavigate = (page, data) => {
     const targetPage = page === "alerts" ? "expiry" : page;
+
     if (targetPage === "edit-food" && data) {
       setEditingItem(data);
     }
+
+    if (targetPage === "meal-planner" && data) {
+      setMealPlannerItem(data);
+    }
+
     setActivePage(targetPage);
   };
 
@@ -72,12 +75,16 @@ export default function Dashboard({ onNavigate }) {
     switch (activePage) {
       case "overview":
         return <DashboardHome onNavigate={handleNavigate} />;
+
       case "inventory":
         return <FoodInventory onNavigate={handleNavigate} />;
+
       case "browse":
         return <BrowseFoodItem onNavigate={handleNavigate} />;
+
       case "expiry":
         return <ExpiryAlerts onNavigate={handleNavigate} />;
+
       case "add-food":
         return (
           <AddFoodItem
@@ -85,6 +92,7 @@ export default function Dashboard({ onNavigate }) {
             onCancel={() => setActivePage("inventory")}
           />
         );
+
       case "edit-food":
         return editingItem ? (
           <EditFoodItem
@@ -95,16 +103,31 @@ export default function Dashboard({ onNavigate }) {
         ) : (
           <FoodInventory onNavigate={handleNavigate} />
         );
+
       case "meal-planner":
-        return <MealPlanner />;
+        return (
+          <MealPlanner
+            initialItem={mealPlannerItem}
+            onInitialItemConsumed={() => setMealPlannerItem(null)}
+          />
+        );
+
       case "settings":
         return (
           <Settings onProfileUpdated={() => setProfileVersion((v) => v + 1)} />
         );
+
       case "notifications":
-        return <Notifications onUnreadCountChange={setUnreadCount} />;
+        return (
+          <Notifications
+            onUnreadCountChange={setUnreadCount}
+            onNavigate={handleNavigate}
+          />
+        );
+
       case "analytics":
         return <Analytics />;
+
       default:
         return <DashboardHome />;
     }

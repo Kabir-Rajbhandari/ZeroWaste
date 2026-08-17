@@ -654,7 +654,7 @@ export default function FoodInventory({ onNavigate }) {
             style={{
               color: currentPage === 1 ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
@@ -672,7 +672,7 @@ export default function FoodInventory({ onNavigate }) {
               color:
                 currentPage === totalPages ? colors.border : colors.charcoal,
               background: "none",
-              border: "none",
+              border: `2px solid ${colors.greenLrgb}`,
             }}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}

@@ -101,7 +101,7 @@ async function fetchMealDetail(id) {
   };
 }
 
-export default function SuggestedMeals() {
+export default function SuggestedMeals({ onUseRecipe }) {
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -411,6 +411,27 @@ export default function SuggestedMeals() {
                 <X size={20} />
               </button>
             </div>
+
+            {recipeDetail && !recipeLoading && !recipeErr && (
+              <button
+                type="button"
+                className="btn view-btn w-100 mb-3 d-flex align-items-center justify-content-center gap-2"
+                style={{
+                  ...btnPrimaryStyle,
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  padding: "0.5rem 1rem",
+                  fontSize: "0.9rem",
+                  color: colors.white,
+                }}
+                onClick={() => {
+                  onUseRecipe?.(recipeDetail.name);
+                  closeRecipe();
+                }}
+              >
+                Use This Recipe — Pick a Day &amp; Meal
+              </button>
+            )}
 
             {recipeLoading ? (
               <div className="text-center py-4" style={{ color: colors.muted }}>

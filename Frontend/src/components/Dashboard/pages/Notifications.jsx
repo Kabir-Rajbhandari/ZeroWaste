@@ -1,5 +1,7 @@
 // src/components/Dashboard/pages/Notifications.jsx
-import { useEffect, useMemo, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronsRight, ChevronsLeft } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { notificationApi } from "../../../services/api";
 
@@ -8,15 +10,30 @@ const PAGE_SIZE = 8;
 
 function timeAgo(isoString) {
   if (!isoString) return "";
+
   const then = new Date(isoString).getTime();
   const diffMs = Date.now() - then;
+
   const minutes = Math.floor(diffMs / 60000);
+
   if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  }
+
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+
+  if (hours < 24) {
+    return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  }
+
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} day${days !== 1 ? "s" : ""} ago`;
+
+  if (days < 7) {
+    return `${days} day${days !== 1 ? "s" : ""} ago`;
+  }
+
   return new Date(isoString).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -24,81 +41,181 @@ function timeAgo(isoString) {
   });
 }
 
-export default function Notifications({ onUnreadCountChange }) {
+export default function Notifications({ onUnreadCountChange, onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
+
   const [activeFilter, setActiveFilter] = useState("All");
   const [page, setPage] = useState(1);
+
   const [actioningId, setActioningId] = useState(null);
   const [actionErr, setActionErr] = useState("");
 
-  const load = async () => {
-    setLoading(true);
-    setErrMsg("");
+  /*
+   * Load notifications.
+   *
+   * This function is reused for:
+   * 1. Initial notification loading
+   * 2. Refreshing notifications after Accept / Decline
+   *
+   * We intentionally do not set loading=true here.
+   * The component starts with loading=true for the initial request.
+   * This avoids unnecessary synchronous state updates from useEffect.
+   */
+  const loadNotifications = useCallback(async () => {
     try {
       const data = await notificationApi.getAll();
-      const list = Array.isArray(data) ? data : [];
+
+      const list = Array.isArray(data)
+        ? [...data].sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          )
+        : [];
+
       setNotifications(list);
+      setErrMsg("");
     } catch (err) {
       setErrMsg(err.message || "Failed to load notifications.");
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    (async () => {
-      await load();
-      // Visiting this page counts as having seen everything — persist that
-      // to the backend (not just the local badge) so the count doesn't
-      // reappear the next time it's polled from another page.
-      try {
-        await notificationApi.markAllRead();
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      } catch {
-        // Non-critical — the explicit "Mark all as read" button remains available.
-      }
-      onUnreadCountChange?.(0);
-    })();
-
-    const timer = window.setTimeout(() => {
-      onUnreadCountChange?.(0);
-      void load();
-    }, 0);
-    return () => window.clearTimeout(timer);
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * Initial notification loading.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInitialNotifications = async () => {
+      if (cancelled) return;
+
+      await loadNotifications();
+    };
+
+    void loadInitialNotifications();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadNotifications]);
+
+  /*
+   * Keep unread count synchronized with notifications.
+   */
+  useEffect(() => {
+    const unreadCount = notifications.filter(
+      (notification) => !notification.read,
+    ).length;
+
+    onUnreadCountChange?.(unreadCount);
+  }, [notifications, onUnreadCountChange]);
+
+  /*
+   * Filter notifications.
+   */
   const filtered = useMemo(() => {
-    if (activeFilter === "All") return notifications;
-    return notifications.filter((n) => n.category === activeFilter);
+    if (activeFilter === "All") {
+      return notifications;
+    }
+
+    return notifications.filter(
+      (notification) => notification.category === activeFilter,
+    );
   }, [notifications, activeFilter]);
 
+  /*
+   * Pagination.
+   */
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
   const currentPage = Math.min(page, totalPages);
+
   const paginatedNotifications = filtered.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
 
+  /*
+   * Handle notification click.
+   *   */
+  const handleNotificationClick = async (notification) => {
+    setActionErr("");
+
+    if (!notification.read) {
+      try {
+        await notificationApi.markRead(notification.id);
+
+        setNotifications((prev) =>
+          prev.map((item) =>
+            item.id === notification.id ? { ...item, read: true } : item,
+          ),
+        );
+      } catch (err) {
+        setActionErr(err.message || "Failed to mark notification as read.");
+      }
+    }
+
+    /*
+     * Expiry notifications should always navigate
+     * to the user's Food Inventory.
+
+     */
+    if (notification.type === "EXPIRY_ALERT") {
+      if (onNavigate) {
+        onNavigate("inventory", notification);
+      }
+
+      return;
+    }
+
+    /*
+     * Other notifications can provide their own destination
+     * if available.
+     */
+    const destination =
+      notification.route || notification.path || notification.link;
+
+    if (destination && onNavigate) {
+      onNavigate(destination, notification);
+    }
+  };
+
+  /*
+   * Mark all notifications as read.
+   */
   const handleMarkAllRead = async () => {
+    setActionErr("");
+
     try {
       await notificationApi.markAllRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      onUnreadCountChange?.(0);
+
+      setNotifications((prev) =>
+        prev.map((notification) => ({
+          ...notification,
+          read: true,
+        })),
+      );
     } catch (err) {
       setErrMsg(err.message || "Failed to mark notifications as read.");
     }
   };
 
+  /*
+   * Accept donation claim request.
+   *
+   * After the backend processes the request,
+   * reload notifications using loadNotifications().
+   */
   const handleAccept = async (id) => {
     setActioningId(id);
     setActionErr("");
+
     try {
       await notificationApi.accept(id);
-      await load();
+      await loadNotifications();
     } catch (err) {
       setActionErr(err.message || "Failed to accept this request.");
     } finally {
@@ -106,12 +223,19 @@ export default function Notifications({ onUnreadCountChange }) {
     }
   };
 
+  /*
+   * Decline donation claim request.
+   *
+   * After the backend processes the request,
+   * reload notifications using loadNotifications().
+   */
   const handleDecline = async (id) => {
     setActioningId(id);
     setActionErr("");
+
     try {
       await notificationApi.decline(id);
-      await load();
+      await loadNotifications();
     } catch (err) {
       setActionErr(err.message || "Failed to decline this request.");
     } finally {
@@ -123,10 +247,13 @@ export default function Notifications({ onUnreadCountChange }) {
     <div>
       <style>
         {`
-
-        .mark-btn {
+          .mark-btn {
             opacity: 0.75;
-            transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+            transition:
+              opacity 0.2s ease,
+              background 0.25s ease,
+              transform 0.25s ease,
+              box-shadow 0.25s ease;
           }
 
           .mark-btn:hover:not(:disabled) {
@@ -137,7 +264,11 @@ export default function Notifications({ onUnreadCountChange }) {
 
           .accept-btn {
             opacity: 0.75;
-            transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+            transition:
+              opacity 0.2s ease,
+              background 0.25s ease,
+              transform 0.25s ease,
+              box-shadow 0.25s ease;
           }
 
           .accept-btn:hover:not(:disabled) {
@@ -146,17 +277,21 @@ export default function Notifications({ onUnreadCountChange }) {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
 
-          .fltr-btn{
-          padding: "0.5rem 1.4rem",
-          fontSize: "0.9rem",
-          border: "none",
-          borderRadius: 6,
-          color: isActive ? "white" : colors.charcoal,
-          cursor: "pointer",
-          transition: "all 0.15s ease",
+          .notification-card {
+            cursor: pointer;
+            transition:
+              transform 0.2s ease,
+              box-shadow 0.2s ease;
+          }
+
+          .notification-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
           }
         `}
       </style>
+
+      {/* Header */}
       <div className="mb-4">
         <h1
           style={{
@@ -170,16 +305,19 @@ export default function Notifications({ onUnreadCountChange }) {
         >
           Notification
         </h1>
+
         <p className="mb-0" style={{ color: colors.muted }}>
           Real-time updates about your donations, expiry alerts, and account
           activity.
         </p>
       </div>
 
+      {/* Filters + Mark All */}
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="d-flex flex-wrap gap-2">
           {TABS.map((tab) => {
             const isActive = activeFilter === tab;
+
             return (
               <button
                 key={tab}
@@ -224,11 +362,14 @@ export default function Notifications({ onUnreadCountChange }) {
         </button>
       </div>
 
+      {/* Errors */}
       {errMsg && <div className="alert alert-danger py-2 small">{errMsg}</div>}
+
       {actionErr && (
         <div className="alert alert-danger py-2 small">{actionErr}</div>
       )}
 
+      {/* Notifications */}
       <div className="d-flex flex-column gap-2">
         {loading ? (
           <div className="text-center py-5" style={{ color: colors.muted }}>
@@ -239,27 +380,52 @@ export default function Notifications({ onUnreadCountChange }) {
             No notifications here yet.
           </div>
         ) : (
-          paginatedNotifications.map((n) => {
-            const isActionable = n.claimRequestId && !n.resolved;
+          paginatedNotifications.map((notification) => {
+            const isActionable =
+              notification.claimRequestId && !notification.resolved;
+
             return (
               <div
-                key={n.id}
-                className="d-flex align-items-start justify-content-between gap-3 rounded-2 p-3"
+                key={notification.id}
+                className="notification-card d-flex align-items-start justify-content-between gap-3 rounded-2 p-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleNotificationClick(notification)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleNotificationClick(notification);
+                  }
+                }}
                 style={{
-                  background: n.read ? colors.authBg : colors.showcase_green,
+                  background: notification.read
+                    ? colors.authBg
+                    : colors.showcase_green,
+
                   border: `1px solid ${colors.greenLrgb}`,
+
+                  boxShadow: notification.read
+                    ? "none"
+                    : `0 2px 8px ${colors.greenLrgb}`,
                 }}
               >
                 <div style={{ minWidth: 0 }}>
+                  {/* Title */}
                   <div className="fw-bold" style={{ color: colors.charcoal }}>
-                    {n.title}
-                  </div>
-                  <div className="small" style={{ color: colors.muted }}>
-                    {n.message}
+                    {notification.title}
                   </div>
 
+                  {/* Message */}
+                  <div className="small" style={{ color: colors.muted }}>
+                    {notification.message}
+                  </div>
+
+                  {/* Accept / Decline */}
                   {isActionable && (
-                    <div className="d-flex align-items-center gap-2 mt-2">
+                    <div
+                      className="d-flex align-items-center gap-2 mt-2"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <button
                         type="button"
                         className="btn btn-sm accept-btn"
@@ -272,11 +438,14 @@ export default function Notifications({ onUnreadCountChange }) {
                           color: colors.white,
                           transition: "all 0.5s ease",
                         }}
-                        disabled={actioningId === n.id}
-                        onClick={() => handleAccept(n.id)}
+                        disabled={actioningId === notification.id}
+                        onClick={() => handleAccept(notification.id)}
                       >
-                        Accept
+                        {actioningId === notification.id
+                          ? "Processing..."
+                          : "Accept"}
                       </button>
+
                       <button
                         type="button"
                         className="btn btn-sm"
@@ -289,15 +458,18 @@ export default function Notifications({ onUnreadCountChange }) {
                           fontSize: "0.9rem",
                           color: colors.white,
                         }}
-                        disabled={actioningId === n.id}
-                        onClick={() => handleDecline(n.id)}
+                        disabled={actioningId === notification.id}
+                        onClick={() => handleDecline(notification.id)}
                       >
-                        Decline
+                        {actioningId === notification.id
+                          ? "Processing..."
+                          : "Decline"}
                       </button>
                     </div>
                   )}
                 </div>
 
+                {/* Timestamp */}
                 <span
                   className="flex-shrink-0 rounded-2 px-3 py-1 small fw-semibold"
                   style={{
@@ -307,7 +479,7 @@ export default function Notifications({ onUnreadCountChange }) {
                     opacity: 0.7,
                   }}
                 >
-                  {timeAgo(n.createdAt)}
+                  {timeAgo(notification.createdAt)}
                 </span>
               </div>
             );
@@ -315,36 +487,62 @@ export default function Notifications({ onUnreadCountChange }) {
         )}
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="d-flex justify-content-end align-items-center gap-2 mt-4">
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm d-flex align-items-center justify-content-center"
+            aria-label="Previous page"
+            title="Previous page"
             style={{
+              width: "34px",
+              height: "34px",
               borderRadius: 4,
               border: `2px solid ${colors.greenLrgb}`,
+              color: colors.greenXd,
+              background: "transparent",
               opacity: currentPage === 1 ? 0.5 : 1,
+              padding: 0,
             }}
             disabled={currentPage === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
-            Prev
+            <ChevronsLeft size={18} strokeWidth={2} />
           </button>
-          <span style={{ color: colors.charcoal, fontWeight: 700 }}>
+
+          <span
+            style={{
+              minWidth: "30px",
+              textAlign: "center",
+              color: colors.charcoal,
+              fontWeight: 700,
+            }}
+          >
             {currentPage}
           </span>
+
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm d-flex align-items-center justify-content-center"
+            aria-label="Next page"
+            title="Next page"
             style={{
+              width: "34px",
+              height: "34px",
               borderRadius: 4,
               border: `2px solid ${colors.greenLrgb}`,
+              color: colors.greenXd,
+              background: "transparent",
               opacity: currentPage === totalPages ? 0.5 : 1,
+              padding: 0,
             }}
             disabled={currentPage === totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() =>
+              setPage((current) => Math.min(totalPages, current + 1))
+            }
           >
-            Next
+            <ChevronsRight size={18} strokeWidth={2} />
           </button>
         </div>
       )}

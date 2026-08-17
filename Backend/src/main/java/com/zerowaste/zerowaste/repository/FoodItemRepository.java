@@ -18,6 +18,12 @@ public interface FoodItemRepository extends JpaRepository<FoodItem, Long> {
 
     Optional<FoodItem> findByIdAndUserId(Long id, Long userId);
 
-    // Not yet donated, not already alerted on, expiring within the window (inclusive).
-    List<FoodItem> findByDonatedFalseAndExpiryAlertSentFalseAndExpiryDateBetween(LocalDate start, LocalDate end);
+    /**
+     * Finds active food items whose expiry date falls between the supplied
+     * start and end dates, inclusive.
+     */
+    List<FoodItem> findByDonatedFalseAndExpiryDateBetween(
+            LocalDate startDate,
+            LocalDate endDate
+    );
 }

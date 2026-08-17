@@ -6,6 +6,7 @@ function toISODate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
+
   return `${y}-${m}-${d}`;
 }
 
@@ -32,53 +33,108 @@ function formatShort(date) {
 function buildMonthGrid(monthDate) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
+
   const first = new Date(year, month, 1);
-  const firstWeekday = first.getDay() === 0 ? 6 : first.getDay() - 1; // Mon=0
+
+  // Monday = 0
+  const firstWeekday = first.getDay() === 0 ? 6 : first.getDay() - 1;
+
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+
   const cells = [];
-  for (let i = 0; i < firstWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
-  while (cells.length % 7 !== 0) cells.push(null);
+
+  for (let i = 0; i < firstWeekday; i++) {
+    cells.push(null);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(new Date(year, month, d));
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+
   return cells;
 }
 
 const PRESETS = [
   {
     label: "Today",
-    range: () => [startOfDay(new Date()), startOfDay(new Date())],
+    range: () => {
+      const now = new Date();
+
+      return [startOfDay(now), startOfDay(now)];
+    },
   },
+
   {
     label: "Yesterday",
-    range: () => [
-      startOfDay(addDays(new Date(), -1)),
-      startOfDay(addDays(new Date(), -1)),
-    ],
+    range: () => {
+      const yesterday = addDays(new Date(), -1);
+
+      return [startOfDay(yesterday), startOfDay(yesterday)];
+    },
   },
+
   {
     label: "Last 7 days",
-    range: () => [startOfDay(addDays(new Date(), -6)), startOfDay(new Date())],
+    range: () => {
+      const now = new Date();
+
+      return [startOfDay(addDays(now, -6)), startOfDay(now)];
+    },
   },
+
   {
     label: "Last 30 days",
-    range: () => [startOfDay(addDays(new Date(), -29)), startOfDay(new Date())],
+    range: () => {
+      const now = new Date();
+
+      return [startOfDay(addDays(now, -29)), startOfDay(now)];
+    },
   },
+
   {
     label: "This month",
     range: () => {
       const now = new Date();
-      return [
-        startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)),
-        startOfDay(now),
-      ];
+
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      return [startOfDay(start), startOfDay(now)];
     },
   },
+
   {
     label: "Last month",
     range: () => {
       const now = new Date();
+
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
       const end = new Date(now.getFullYear(), now.getMonth(), 0);
+
       return [startOfDay(start), startOfDay(end)];
+    },
+  },
+
+  {
+    /*
+     * Year-to-date.
+     *
+     * Example:
+     * 17 Aug 2026
+     * =>
+     * 01 Jan 2026 – 17 Aug 2026
+     */
+    label: "This year",
+    range: () => {
+      const now = new Date();
+
+      const start = new Date(now.getFullYear(), 0, 1);
+
+      return [startOfDay(start), startOfDay(now)];
     },
   },
 ];
@@ -86,27 +142,48 @@ const PRESETS = [
 export default function DateRangePicker({ value, onChange, onClear }) {
   const [open, setOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [pendingStart, setPendingStart] = useState(value?.start || null);
-  const [pendingEnd, setPendingEnd] = useState(value?.end || null);
+
+  /*
+   * These are temporary selections inside
+   * the calendar.
+   *
+   * They are initialized from the parent value
+   * once when the component mounts.
+   *
+   * We do NOT synchronize them through an effect,
+   * because that caused the React cascading-render
+   * warning.
+   */
+  const [pendingStart, setPendingStart] = useState(() => value?.start || null);
+
+  const [pendingEnd, setPendingEnd] = useState(() => value?.end || null);
+
   const [visibleMonth, setVisibleMonth] = useState(
     () => value?.start || startOfDay(new Date()),
   );
+
   const containerRef = useRef(null);
 
-  useEffect(() => {
-    setPendingStart(value?.start || null);
-    setPendingEnd(value?.end || null);
-  }, [value?.start, value?.end]);
-
+  /*
+   * Close the picker when clicking outside.
+   *
+   * This is safe because setOpen() happens inside
+   * the actual DOM event callback.
+   */
   useEffect(() => {
     if (!open) return;
+
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [open]);
 
   const monthCells = useMemo(
@@ -116,61 +193,126 @@ export default function DateRangePicker({ value, onChange, onClear }) {
 
   const triggerLabel =
     value?.start && value?.end
-      ? `${formatShort(value.start)} \u2013 ${formatShort(value.end)}`
+      ? `${formatShort(value.start)} – ${formatShort(value.end)}`
       : "Select Date";
 
+  /*
+   * Manual calendar date selection.
+   */
   const handleDayClick = (day) => {
     if (!day) return;
+
     const clicked = startOfDay(day);
-    if (!pendingStart || (pendingStart && pendingEnd)) {
+
+    /*
+     * Start a new range when:
+     * - there is no start date yet
+     * - previous range is already complete
+     */
+    if (!pendingStart || pendingEnd) {
       setPendingStart(clicked);
       setPendingEnd(null);
       return;
     }
-    if (clicked < pendingStart) {
-      setPendingEnd(pendingStart);
-      setPendingStart(clicked);
-    } else {
-      setPendingEnd(clicked);
-    }
-  };
 
-  const applyRange = (start, end) => {
-    onChange?.({ start, end });
+    let start;
+    let end;
+
+    /*
+     * If second date is before first date,
+     * automatically reverse them.
+     */
+    if (clicked < pendingStart) {
+      start = clicked;
+      end = pendingStart;
+    } else {
+      start = pendingStart;
+      end = clicked;
+    }
+
+    setPendingStart(start);
+    setPendingEnd(end);
+
+    /*
+     * Send completed range to parent.
+     */
+    onChange?.({
+      start,
+      end,
+    });
+
     setOpen(false);
   };
 
-  useEffect(() => {
-    if (pendingStart && pendingEnd) {
-      applyRange(pendingStart, pendingEnd);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingStart, pendingEnd]);
-
+  /*
+   * Preset selection.
+   */
   const handlePreset = (preset) => {
     const [start, end] = preset.range();
+
     setPendingStart(start);
     setPendingEnd(end);
-    applyRange(start, end);
+
+    /*
+     * Show the month containing the
+     * selected starting date.
+     */
+    setVisibleMonth(new Date(start.getFullYear(), start.getMonth(), 1));
+
+    /*
+     * Send the selected range to parent.
+     */
+    onChange?.({
+      start,
+      end,
+    });
+
+    setOpen(false);
   };
 
+  /*
+   * Reset.
+   */
   const handleReset = () => {
     setPendingStart(null);
     setPendingEnd(null);
+
+    setVisibleMonth(startOfDay(new Date()));
+
     onClear?.();
+
+    setOpen(false);
   };
 
+  /*
+   * Check whether the calendar day
+   * falls inside the selected range.
+   */
   const isInRange = (day) => {
-    if (!day || !pendingStart) return false;
+    if (!day || !pendingStart) {
+      return false;
+    }
+
     const d = startOfDay(day).getTime();
+
     const s = pendingStart.getTime();
+
     const e = (pendingEnd || pendingStart).getTime();
+
     return d >= Math.min(s, e) && d <= Math.max(s, e);
   };
 
+  /*
+   * Check whether the day is the
+   * start or end of the range.
+   */
   const isEndpoint = (day) => {
-    if (!day) return false;
+    if (!day) {
+      return false;
+    }
+
     const d = startOfDay(day).getTime();
+
     return (
       (pendingStart && d === pendingStart.getTime()) ||
       (pendingEnd && d === pendingEnd.getTime())
@@ -180,7 +322,10 @@ export default function DateRangePicker({ value, onChange, onClear }) {
   return (
     <div
       ref={containerRef}
-      style={{ position: "relative", display: "inline-block" }}
+      style={{
+        position: "relative",
+        display: "inline-block",
+      }}
     >
       <button
         id="btn-date-picker"
@@ -208,6 +353,7 @@ export default function DateRangePicker({ value, onChange, onClear }) {
         }}
       >
         <CalendarDays size={15} color={colors.black} />
+
         {triggerLabel}
       </button>
 
@@ -240,11 +386,11 @@ export default function DateRangePicker({ value, onChange, onClear }) {
               flexDirection: "column",
             }}
           >
-            {PRESETS.map((p) => (
+            {PRESETS.map((preset) => (
               <button
-                key={p.label}
+                key={preset.label}
                 type="button"
-                onClick={() => handlePreset(p)}
+                onClick={() => handlePreset(preset)}
                 style={{
                   textAlign: "left",
                   border: "none",
@@ -254,17 +400,19 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                   color: colors.charcoal,
                   cursor: "pointer",
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = colors.authGreen)
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "transparent")
-                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = colors.authGreen;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
               >
-                {p.label}
+                {preset.label}
               </button>
             ))}
+
             <div style={{ flex: 1 }} />
+
             <button
               type="button"
               onClick={handleReset}
@@ -278,13 +426,24 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                 color: colors.green,
                 cursor: "pointer",
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = colors.authGreen;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
             >
               Reset
             </button>
           </div>
 
           {/* Calendar */}
-          <div style={{ padding: "0.75rem 1rem", flex: 1 }}>
+          <div
+            style={{
+              padding: "0.75rem 1rem",
+              flex: 1,
+            }}
+          >
             <div className="d-flex align-items-center justify-content-between mb-2">
               <span
                 style={{
@@ -298,9 +457,12 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                   year: "numeric",
                 })}
               </span>
+
               <div className="d-flex gap-1">
+                {/* Previous month */}
                 <button
                   type="button"
+                  aria-label="Previous month"
                   onClick={() =>
                     setVisibleMonth(
                       (m) => new Date(m.getFullYear(), m.getMonth() - 1, 1),
@@ -315,8 +477,11 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                 >
                   <ChevronLeft size={16} color={colors.muted} />
                 </button>
+
+                {/* Next month */}
                 <button
                   type="button"
+                  aria-label="Next month"
                   onClick={() =>
                     setVisibleMonth(
                       (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1),
@@ -334,6 +499,7 @@ export default function DateRangePicker({ value, onChange, onClear }) {
               </div>
             </div>
 
+            {/* Weekday headings */}
             <div
               style={{
                 display: "grid",
@@ -342,9 +508,9 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                 marginBottom: 4,
               }}
             >
-              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
+              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((dayName) => (
                 <div
-                  key={d}
+                  key={dayName}
                   style={{
                     textAlign: "center",
                     fontSize: "0.7rem",
@@ -352,11 +518,12 @@ export default function DateRangePicker({ value, onChange, onClear }) {
                     fontWeight: 600,
                   }}
                 >
-                  {d}
+                  {dayName}
                 </div>
               ))}
             </div>
 
+            {/* Calendar days */}
             <div
               style={{
                 display: "grid",
@@ -366,7 +533,9 @@ export default function DateRangePicker({ value, onChange, onClear }) {
             >
               {monthCells.map((day, i) => {
                 const inRange = isInRange(day);
+
                 const endpoint = isEndpoint(day);
+
                 return (
                   <button
                     key={i}

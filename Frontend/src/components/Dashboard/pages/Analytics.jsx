@@ -30,20 +30,26 @@ function DonutChart({
   animationDelay = 0,
 }) {
   const [isAnimating, setIsAnimating] = useState(true);
+
   const padding = 10;
   const radius = (size - strokeWidth - padding) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  // Precompute each segment's dash offset in one pure pass instead of
-  // mutating a `cumulative` variable inside the JSX .map() below — mutating
-  // a render-scoped variable as a side effect of rendering is what triggers
-  // "Cannot reassign variable after render completes".
+  // Build chart segments without mutating a render-scoped variable.
   const segments = data.reduce((acc, d) => {
     if (d.percent <= 0) return acc;
+
     const prevCumulative =
       acc.length > 0 ? acc[acc.length - 1].cumulativeEnd : 0;
+
     const cumulativeEnd = prevCumulative + (d.percent / 100) * circumference;
-    acc.push({ ...d, dashoffset: -prevCumulative, cumulativeEnd });
+
+    acc.push({
+      ...d,
+      dashoffset: -prevCumulative,
+      cumulativeEnd,
+    });
+
     return acc;
   }, []);
 
@@ -52,6 +58,7 @@ function DonutChart({
       () => setIsAnimating(false),
       1200 + animationDelay,
     );
+
     return () => clearTimeout(timer);
   }, [animationDelay]);
 
@@ -75,13 +82,18 @@ function DonutChart({
         stroke="#DEE5D4"
         strokeWidth={strokeWidth}
       />
+
       {segments.map((d) => {
         const safePercent = d.percent >= 100 ? 99.999 : d.percent;
+
         const length = (safePercent / 100) * circumference;
+
         const dasharray = `${length} ${circumference - length}`;
+
         const dashoffset = d.dashoffset;
 
         const isSelected = selectedCategory === d.category;
+
         const isDimmed = selectedCategory && !isSelected;
 
         return (
@@ -99,12 +111,17 @@ function DonutChart({
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
             style={{
               cursor: onSelectCategory ? "pointer" : "default",
-              transition: `stroke-dasharray 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) ${animationDelay}ms, 
-                            stroke-width 0.15s, stroke-opacity 0.15s`,
+              transition: `stroke-dasharray 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) ${animationDelay}ms,
+                            stroke-width 0.15s,
+                            stroke-opacity 0.15s`,
             }}
             onClick={() => onSelectCategory?.(d.category)}
           >
-            <title>{`${CATEGORY_LABELS[d.category] || d.category}: ${d.percent}% (click to filter)`}</title>
+            <title>
+              {`${
+                CATEGORY_LABELS[d.category] || d.category
+              }: ${d.percent}% (click to filter)`}
+            </title>
           </circle>
         );
       })}
@@ -120,6 +137,7 @@ function BarChart({
   animationDelay = 0,
 }) {
   const [isAnimating, setIsAnimating] = useState(true);
+
   const max = Math.max(...data.map((d) => d.percent), 1);
 
   useEffect(() => {
@@ -127,6 +145,7 @@ function BarChart({
       () => setIsAnimating(false),
       1000 + animationDelay,
     );
+
     return () => clearTimeout(timer);
   }, [animationDelay]);
 
@@ -137,7 +156,9 @@ function BarChart({
     >
       {data.map((d, idx) => {
         const isSelected = selectedCategory === d.category;
+
         const isDimmed = selectedCategory && !isSelected;
+
         const targetHeight =
           d.percent > 0 ? Math.max((d.percent / max) * (height - 24), 6) : 2;
 
@@ -161,7 +182,9 @@ function BarChart({
                 opacity: isDimmed ? 0.35 : 1,
                 outline: isSelected ? `2px solid ${colors.charcoal}` : "none",
                 outlineOffset: 2,
-                transition: `height 1s cubic-bezier(0.34, 1.56, 0.64, 1) ${animationDelay + idx * 100}ms, opacity 0.15s`,
+                transition: `height 1s cubic-bezier(0.34, 1.56, 0.64, 1) ${
+                  animationDelay + idx * 100
+                }ms, opacity 0.15s`,
               }}
             />
           </div>
@@ -179,6 +202,7 @@ function Legend({ data, selectedCategory, onSelectCategory }) {
     >
       {data.map((d) => {
         const isSelected = selectedCategory === d.category;
+
         return (
           <div
             key={d.category}
@@ -203,9 +227,11 @@ function Legend({ data, selectedCategory, onSelectCategory }) {
                     : "none",
               }}
             />
+
             <span className="small" style={{ color: colors.charcoal }}>
               {CATEGORY_LABELS[d.category] || d.category}
             </span>
+
             <span
               className="small fw-semibold ms-auto"
               style={{ color: colors.muted }}
@@ -221,7 +247,9 @@ function Legend({ data, selectedCategory, onSelectCategory }) {
 
 function StatCard({ icon: Icon, label, value, sublabel, delay = 0 }) {
   const isNumeric = typeof value === "number";
+
   const animatedValue = useCountUp(isNumeric ? value : 0, 2000, isNumeric);
+
   const displayValue = isNumeric ? animatedValue : value;
 
   return (
@@ -236,11 +264,12 @@ function StatCard({ icon: Icon, label, value, sublabel, delay = 0 }) {
           "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-8px)";
-        e.currentTarget.style.boxShadow = `0 12px 24px ${colors.greenLrgb}`;
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.boxShadow = "0 4px 10px rgba(0, 0, 0, 0.05)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
+
         e.currentTarget.style.boxShadow = "none";
       }}
     >
@@ -250,6 +279,7 @@ function StatCard({ icon: Icon, label, value, sublabel, delay = 0 }) {
       >
         {label}
       </div>
+
       <div className="d-flex align-items-center justify-content-between">
         <span
           style={{
@@ -263,12 +293,16 @@ function StatCard({ icon: Icon, label, value, sublabel, delay = 0 }) {
         >
           {displayValue}
         </span>
+
         <Icon
           size={30}
           color={colors.authGreen}
-          style={{ transition: "transform 0.3s ease" }}
+          style={{
+            transition: "transform 0.3s ease",
+          }}
         />
       </div>
+
       {sublabel && (
         <div className="small mt-2" style={{ color: colors.muted }}>
           {sublabel}
@@ -288,17 +322,45 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function Analytics() {
+  /*
+   * Keep "month" as the initial API period so the dashboard
+   * loads immediately when the Analytics page opens.
+   *
+   * Once the user chooses a date preset/range, the picker
+   * changes this to "custom" and sends the exact dates.
+   */
   const [period, setPeriod] = useState("month");
+
   const [category, setCategory] = useState("All");
-  const [customRange, setCustomRange] = useState({ start: null, end: null });
+
+  const [customRange, setCustomRange] = useState({
+    start: null,
+    end: null,
+  });
+
   const [summary, setSummary] = useState(null);
+
   const [inventoryOverview, setInventoryOverview] = useState(null);
+
   const [foodSavedBreakdown, setFoodSavedBreakdown] = useState(null);
+
   const [wasteBreakdown, setWasteBreakdown] = useState(null);
+
   const [loading, setLoading] = useState(true);
+
   const [errMsg, setErrMsg] = useState("");
+
   const [isCategoryHovered, setIsCategoryHovered] = useState(false);
 
+  /*
+   * Build the exact date range sent to the API.
+   *
+   * For custom/date-picker selections:
+   * {
+   *   startDate: "2026-08-11",
+   *   endDate: "2026-08-17"
+   * }
+   */
   const rangeParam =
     period === "custom" && customRange.start && customRange.end
       ? {
@@ -307,40 +369,67 @@ export default function Analytics() {
         }
       : null;
 
-  // Derived, not effect-synced: whether we're waiting on the user to finish
-  // picking a custom range is fully computable from `period`/`rangeParam`
-  // every render, so it doesn't need its own setState — computing it here
-  // avoids a synchronous setState(false)-then-return inside the effect below.
+  /*
+   * The user may click only the first calendar date.
+   * Wait until both start and end are available.
+   */
   const awaitingCustomRange = period === "custom" && !rangeParam;
 
+  /*
+   * Reload analytics whenever:
+   *
+   * - selected period changes
+   * - category changes
+   * - custom start changes
+   * - custom end changes
+   *
+   * The cancellation flag prevents an older request from
+   * overwriting a newer filter selection.
+   */
   useEffect(() => {
     if (awaitingCustomRange) {
       return;
     }
+
     let cancelled = false;
-    (async () => {
+
+    const loadAnalytics = async () => {
       setLoading(true);
       setErrMsg("");
+
       try {
         const [summaryData, inventoryData, savedData, wasteData] =
           await Promise.all([
             analyticsApi.getSummary(period, category, rangeParam),
-            // FIX: Pass ONLY 'category' to query current active inventory stock correctly
+
             analyticsApi.getInventoryOverview(category),
+
             analyticsApi.getFoodSavedBreakdown(period, category, rangeParam),
+
             analyticsApi.getWasteBreakdown(period, category, rangeParam),
           ]);
-        if (cancelled) return;
+
+        if (cancelled) {
+          return;
+        }
+
         setSummary(summaryData);
         setInventoryOverview(inventoryData);
         setFoodSavedBreakdown(savedData);
         setWasteBreakdown(wasteData);
       } catch (err) {
-        if (!cancelled) setErrMsg(err.message || "Failed to load analytics.");
+        if (!cancelled) {
+          setErrMsg(err?.message || "Failed to load analytics.");
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    })();
+    };
+
+    loadAnalytics();
+
     return () => {
       cancelled = true;
     };
@@ -352,12 +441,29 @@ export default function Analytics() {
     awaitingCustomRange,
   ]);
 
+  /*
+   * Clicking a chart/legend category toggles the
+   * category filter.
+   */
   const handleSelectCategory = (clicked) => {
     setCategory((current) => (current === clicked ? "All" : clicked));
   };
 
   const handleExport = () => {
     window.print();
+  };
+
+  /*
+   * Clear selected date range from the heading
+   * and return API filtering to the default month.
+   */
+  const handleClearDateRange = () => {
+    setCustomRange({
+      start: null,
+      end: null,
+    });
+
+    setPeriod("month");
   };
 
   return (
@@ -368,6 +474,7 @@ export default function Analytics() {
             opacity: 0;
             transform: translateY(30px);
           }
+
           to {
             opacity: 1;
             transform: translateY(0);
@@ -378,14 +485,22 @@ export default function Analytics() {
           from {
             opacity: 0;
           }
+
           to {
             opacity: 1;
           }
         }
 
         @media print {
-          body * { visibility: hidden; }
-          #analytics-print-area, #analytics-print-area * { visibility: visible; }
+          body * {
+            visibility: hidden;
+          }
+
+          #analytics-print-area,
+          #analytics-print-area * {
+            visibility: visible;
+          }
+
           #analytics-print-area {
             position: absolute;
             left: 0;
@@ -393,22 +508,31 @@ export default function Analytics() {
             width: 100%;
             padding: 24px;
           }
-          #analytics-export-controls { display: none !important; }
+
+          #analytics-export-controls {
+            display: none !important;
+          }
         }
 
         .btn-export-report {
           opacity: 0.75;
-          transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease; 
+          transition:
+            opacity 0.2s ease,
+            background 0.25s ease,
+            transform 0.25s ease,
+            box-shadow 0.25s ease;
         }
 
         .btn-export-report:hover:not(:disabled) {
           opacity: 1;
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+          box-shadow:
+            0 8px 20px rgba(0, 0, 0, 0.16);
         }
 
         .analytics-chart-container {
-          animation: slideInUp 0.6s ease-out backwards;
+          animation:
+            slideInUp 0.6s ease-out backwards;
         }
 
         .analytics-chart-container:nth-child(1) {
@@ -428,6 +552,9 @@ export default function Analytics() {
         }
       `}</style>
 
+      {/* =====================================================
+          HEADER + FILTER CONTROLS
+          ===================================================== */}
       <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
         <div>
           <h1
@@ -442,31 +569,37 @@ export default function Analytics() {
           >
             Analytics
           </h1>
+
           <p className="mb-0" style={{ color: colors.muted }}>
             Track your food-saving progress and waste reduction impact.
           </p>
+
+          {/* Selected date range */}
           {period === "custom" && customRange.start && customRange.end && (
             <p
               className="mb-0 mt-1 small d-flex align-items-center gap-2"
-              style={{ color: colors.green, fontWeight: 600 }}
+              style={{
+                color: colors.green,
+                fontWeight: 600,
+              }}
             >
               {customRange.start.toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",
-              })}{" "}
-              –{" "}
+              })}
+
+              {" – "}
+
               {customRange.end.toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",
               })}
+
               <button
                 type="button"
-                onClick={() => {
-                  setCustomRange({ start: null, end: null });
-                  setPeriod("month");
-                }}
+                onClick={handleClearDateRange}
                 style={{
                   border: "none",
                   background: "none",
@@ -482,10 +615,15 @@ export default function Analytics() {
               </button>
             </p>
           )}
+
+          {/* Selected category */}
           {category !== "All" && (
             <p
               className="mb-0 mt-1 small d-flex align-items-center gap-2"
-              style={{ color: colors.green, fontWeight: 600 }}
+              style={{
+                color: colors.green,
+                fontWeight: 600,
+              }}
             >
               Filtered to {CATEGORY_LABELS[category] || category}
               <button
@@ -508,6 +646,15 @@ export default function Analytics() {
           )}
         </div>
 
+        {/* =================================================
+            FILTER CONTROLS
+
+            IMPORTANT:
+            Weekly / Monthly / Yearly buttons have been
+            completely removed.
+
+            DateRangePicker is now the only period filter.
+            ================================================= */}
         <div
           id="analytics-export-controls"
           className="d-flex align-items-center gap-3 flex-wrap"
@@ -519,11 +666,16 @@ export default function Analytics() {
               setPeriod("custom");
             }}
             onClear={() => {
-              setCustomRange({ start: null, end: null });
+              setCustomRange({
+                start: null,
+                end: null,
+              });
+
               setPeriod("month");
             }}
           />
 
+          {/* Category filter */}
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -551,6 +703,7 @@ export default function Analytics() {
             ))}
           </select>
 
+          {/* Export */}
           <button
             type="button"
             className="btn btn-export-report d-inline-flex align-items-center gap-2 outline-export"
@@ -566,27 +719,32 @@ export default function Analytics() {
             }}
             onClick={handleExport}
           >
-            <Download size={16} /> Export Report
+            <Download size={16} />
+            Export Report
           </button>
         </div>
       </div>
 
+      {/* Error */}
       {errMsg && (
         <div className="alert alert-danger py-2 small mb-3">{errMsg}</div>
       )}
 
+      {/* =====================================================
+          CONTENT STATES
+          ===================================================== */}
+
+      {/* Waiting for second date */}
       {awaitingCustomRange ? (
         <div className="text-center py-5" style={{ color: colors.muted }}>
-          Pick a start and end date to view analytics for your custom range.
+          Pick a start and end date to view analytics for your selected range.
         </div>
       ) : loading ? (
         <div className="text-center py-5" style={{ color: colors.muted }}>
           Loading analytics…
         </div>
       ) : !summary?.foodSavedCount && !summary?.donationsMadeCount ? (
-        // UC4 – Food Analytics, Alternative Course 3a: "If no food-saving
-        // data is found, system shows a message encouraging the user to
-        // begin logging and donating to view progress."
+        /* No analytics data */
         <div
           className="text-center py-5 rounded-4"
           style={{
@@ -595,41 +753,67 @@ export default function Analytics() {
             color: colors.charcoal,
           }}
         >
-          <Leaf size={40} style={{ opacity: 0.6, marginBottom: "0.75rem" }} />
-          <h5 style={{ fontFamily: fonts.body, fontWeight: 700 }}>
+          <Leaf
+            size={40}
+            style={{
+              opacity: 0.6,
+              marginBottom: "0.75rem",
+            }}
+          />
+
+          <h5
+            style={{
+              fontFamily: fonts.body,
+              fontWeight: 700,
+            }}
+          >
             No food-saving data yet
           </h5>
-          <p style={{ color: colors.muted, marginBottom: 0 }}>
+
+          <p
+            style={{
+              color: colors.muted,
+              marginBottom: 0,
+            }}
+          >
             Start logging items in your Food Inventory and marking them as used
             or donated to see your impact here.
           </p>
         </div>
       ) : (
         <>
+          {/* =================================================
+              STAT CARDS
+              ================================================= */}
           <div className="d-flex flex-wrap gap-3 mb-4">
             <StatCard
               icon={Leaf}
               label="Food Saved"
               value={summary?.foodSavedCount ?? 0}
-              sublabel={`items marked used ${period === "custom" ? "in range" : `this ${period}`}`}
+              sublabel="items marked used in selected range"
               delay={0}
             />
+
             <StatCard
               icon={HeartHandshake}
               label="Donations Made"
               value={summary?.donationsMadeCount ?? 0}
-              sublabel={`donations ${period === "custom" ? "in range" : `this ${period}`}`}
+              sublabel="donations in selected range"
               delay={100}
             />
+
             <StatCard
               icon={Recycle}
               label="Waste Reduced"
               value={`${summary?.wasteReducedPercent ?? 0}%`}
-              sublabel={`of items saved or donated ${period === "custom" ? "in range" : `this ${period}`}`}
+              sublabel="of items saved or donated in selected range"
               delay={200}
             />
           </div>
 
+          {/* =================================================
+              CHARTS
+              ================================================= */}
           <div className="row g-4">
             {/* Inventory Overview */}
             <div className="col-12 col-lg-4 analytics-chart-container">
@@ -640,9 +824,15 @@ export default function Analytics() {
                   border: `2px solid ${colors.greenLrgb}`,
                 }}
               >
-                <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
+                <h6
+                  className="fw-bold mb-3"
+                  style={{
+                    color: colors.charcoal,
+                  }}
+                >
                   Inventory Overview
                 </h6>
+
                 <div className="d-flex align-items-center gap-4 flex-wrap">
                   <DonutChart
                     data={inventoryOverview?.breakdown || []}
@@ -650,18 +840,27 @@ export default function Analytics() {
                     onSelectCategory={handleSelectCategory}
                     animationDelay={350}
                   />
+
                   <Legend
                     data={inventoryOverview?.breakdown || []}
                     selectedCategory={category !== "All" ? category : null}
                     onSelectCategory={handleSelectCategory}
                   />
                 </div>
+
                 <div
                   className="text-end mt-3 small"
-                  style={{ color: colors.muted }}
+                  style={{
+                    color: colors.muted,
+                  }}
                 >
                   Total Items:{" "}
-                  <span className="fw-bold" style={{ color: colors.charcoal }}>
+                  <span
+                    className="fw-bold"
+                    style={{
+                      color: colors.charcoal,
+                    }}
+                  >
                     {inventoryOverview?.totalItems ?? 0}
                   </span>
                 </div>
@@ -677,9 +876,15 @@ export default function Analytics() {
                   border: `2px solid ${colors.greenLrgb}`,
                 }}
               >
-                <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
+                <h6
+                  className="fw-bold mb-3"
+                  style={{
+                    color: colors.charcoal,
+                  }}
+                >
                   Food Saved
                 </h6>
+
                 <div className="d-flex align-items-center gap-4 flex-wrap">
                   <BarChart
                     data={foodSavedBreakdown?.breakdown || []}
@@ -687,18 +892,27 @@ export default function Analytics() {
                     onSelectCategory={handleSelectCategory}
                     animationDelay={450}
                   />
+
                   <Legend
                     data={foodSavedBreakdown?.breakdown || []}
                     selectedCategory={category !== "All" ? category : null}
                     onSelectCategory={handleSelectCategory}
                   />
                 </div>
+
                 <div
                   className="text-end mt-3 small"
-                  style={{ color: colors.muted }}
+                  style={{
+                    color: colors.muted,
+                  }}
                 >
                   Total Items:{" "}
-                  <span className="fw-bold" style={{ color: colors.charcoal }}>
+                  <span
+                    className="fw-bold"
+                    style={{
+                      color: colors.charcoal,
+                    }}
+                  >
                     {foodSavedBreakdown?.totalItems ?? 0}
                   </span>
                 </div>
@@ -714,16 +928,26 @@ export default function Analytics() {
                   border: `2px solid ${colors.greenLrgb}`,
                 }}
               >
-                <h6 className="fw-bold mb-3" style={{ color: colors.charcoal }}>
+                <h6
+                  className="fw-bold mb-3"
+                  style={{
+                    color: colors.charcoal,
+                  }}
+                >
                   Waste by Category
                 </h6>
+
                 <p
                   className="small mb-3"
-                  style={{ color: colors.muted, marginTop: "-0.5rem" }}
+                  style={{
+                    color: colors.muted,
+                    marginTop: "-0.5rem",
+                  }}
                 >
                   Which categories are actually spoiling, not just being used or
                   donated.
                 </p>
+
                 <div className="d-flex align-items-center gap-4 flex-wrap">
                   <DonutChart
                     data={wasteBreakdown?.breakdown || []}
@@ -731,18 +955,27 @@ export default function Analytics() {
                     onSelectCategory={handleSelectCategory}
                     animationDelay={550}
                   />
+
                   <Legend
                     data={wasteBreakdown?.breakdown || []}
                     selectedCategory={category !== "All" ? category : null}
                     onSelectCategory={handleSelectCategory}
                   />
                 </div>
+
                 <div
                   className="text-end mt-3 small"
-                  style={{ color: colors.muted }}
+                  style={{
+                    color: colors.muted,
+                  }}
                 >
                   Total Items:{" "}
-                  <span className="fw-bold" style={{ color: colors.charcoal }}>
+                  <span
+                    className="fw-bold"
+                    style={{
+                      color: colors.charcoal,
+                    }}
+                  >
                     {wasteBreakdown?.totalItems ?? 0}
                   </span>
                 </div>
