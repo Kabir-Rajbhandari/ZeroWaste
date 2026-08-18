@@ -1,11 +1,11 @@
 package com.zerowaste.zerowaste.repository;
 
-import com.zerowaste.zerowaste.model.Notification;
+import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
-import java.util.Optional;
+import com.zerowaste.zerowaste.model.Notification;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 

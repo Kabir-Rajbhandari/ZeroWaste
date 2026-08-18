@@ -402,7 +402,7 @@ export default function Signup({ onNavigate }) {
               }}
               disabled={securityStatus === "loading"}
             >
-              {securityStatus === "loading" ? "Saving…" : "Continue"}
+              Continue
             </button>
           </form>
         </div>
@@ -410,7 +410,7 @@ export default function Signup({ onNavigate }) {
     );
   }
 
-  // ── Step 3 Screen: "check your email" pending state ──────────────────────
+  // ── Step 3 Screen: "check your email" pending state
   // Shown right after configureSecurity() succeeds — the verification email
   // (link + 6-digit code) was just sent.
   if (!verifyToken && stage === "checkEmail") {
@@ -586,7 +586,7 @@ export default function Signup({ onNavigate }) {
                     className={`form-control signup-input rounded-3 text-center ${
                       completeFieldErrors.code ? "is-invalid" : ""
                     }`}
-                    placeholder="123456"
+                    placeholder="010101"
                     style={{ ...inputStyle, letterSpacing: "0.4em" }}
                     value={completeForm.code}
                     onChange={handleCompleteChange}
@@ -613,9 +613,7 @@ export default function Signup({ onNavigate }) {
                   }}
                   disabled={completeStatus === "loading"}
                 >
-                  {completeStatus === "loading"
-                    ? "Activating…"
-                    : "Activate My Account"}
+                  Activate My Account
                 </button>
               </form>
             </div>

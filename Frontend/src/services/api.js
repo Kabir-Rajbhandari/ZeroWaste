@@ -337,6 +337,10 @@ export const notificationApi = {
   decline(id) {
     return request(`/api/notifications/${id}/decline`, { method: "POST" });
   },
+
+  remove(id) {
+    return request(`/api/notifications/${id}`, { method: "DELETE" });
+  },
 };
 function withCategoryParam(params, category) {
   if (category && category !== "All") {

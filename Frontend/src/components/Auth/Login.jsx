@@ -670,7 +670,7 @@ export default function Login({ onNavigate }) {
                     inputMode="numeric"
                     className="form-control rounded-3 py-2 login-input"
                     style={{ ...inputStyle, fontFamily: fonts.body }}
-                    placeholder="123456"
+                    placeholder="010101"
                     value={otpCode}
                     onChange={(e) =>
                       setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))

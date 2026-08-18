@@ -1,15 +1,15 @@
 package com.zerowaste.zerowaste.service;
 
-import com.zerowaste.zerowaste.dto.NotificationResponse;
-import com.zerowaste.zerowaste.exception.ApiException;
-import com.zerowaste.zerowaste.model.Notification;
-import com.zerowaste.zerowaste.repository.NotificationRepository;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import com.zerowaste.zerowaste.dto.NotificationResponse;
+import com.zerowaste.zerowaste.exception.ApiException;
+import com.zerowaste.zerowaste.model.Notification;
+import com.zerowaste.zerowaste.repository.NotificationRepository;
 
 @Service
 public class NotificationService {
@@ -74,5 +74,33 @@ public class NotificationService {
                 = notificationRepository.save(notification);
 
         return NotificationResponse.from(saved);
+    }
+
+    /**
+     * Removes a single notification for good. Scoped to its owner so this can
+     * never delete someone else's notification even if the id is guessed.
+     *
+     * A pending donation claim request (unresolved, with a claimRequestId)
+     * can't be deleted directly — it still needs an Accept or Decline, and
+     * deleting the notification would strand that request with no way to act on
+     * it. The person needs to resolve it first.
+     */
+    @Transactional
+    public void delete(Long id, Long userId) {
+
+        Notification notification = notificationRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ApiException(
+                "Notification not found.",
+                HttpStatus.NOT_FOUND
+        ));
+
+        if (notification.getClaimRequestId() != null && !Boolean.TRUE.equals(notification.getResolved())) {
+            throw new ApiException(
+                    "Please accept or decline this request before removing it.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        notificationRepository.delete(notification);
     }
 }

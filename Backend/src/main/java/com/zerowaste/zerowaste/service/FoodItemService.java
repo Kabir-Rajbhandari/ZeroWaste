@@ -47,19 +47,22 @@ public class FoodItemService {
     private final NotificationRepository notificationRepository;
     private final FoodActivityLogRepository activityLogRepository;
     private final ActivityLogService activityLogService;
+    private final ExpiryAlertService expiryAlertService;
 
     public FoodItemService(FoodItemRepository foodItemRepository,
             UserRepository userRepository,
             DonationClaimRequestRepository claimRequestRepository,
             NotificationRepository notificationRepository,
             FoodActivityLogRepository activityLogRepository,
-            ActivityLogService activityLogService) {
+            ActivityLogService activityLogService,
+            ExpiryAlertService expiryAlertService) {
         this.foodItemRepository = foodItemRepository;
         this.userRepository = userRepository;
         this.claimRequestRepository = claimRequestRepository;
         this.notificationRepository = notificationRepository;
         this.activityLogRepository = activityLogRepository;
         this.activityLogService = activityLogService;
+        this.expiryAlertService = expiryAlertService;
     }
 
     public List<FoodItemResponse> getAllForUser(Long userId) {
@@ -153,6 +156,13 @@ public class FoodItemService {
         FoodItem savedItem = foodItemRepository.save(item);
         activityLogService.record(userId, "ADDED", savedItem.getCategory(), savedItem.getName(),
                 savedItem.getQuantity());
+
+        // If the item being added is already within its 1-3 day (or same-day)
+        // expiry window, fire its first Alerts notification right now instead
+        // of waiting for tomorrow's 6 AM scheduler run.
+        userRepository.findById(userId)
+                .ifPresent(user -> expiryAlertService.generateIfDue(savedItem, user, LocalDate.now()));
+
         return FoodItemResponse.from(savedItem);
     }
 
@@ -175,6 +185,12 @@ public class FoodItemService {
         FoodItem savedItem = foodItemRepository.save(item);
         activityLogService.record(userId, "UPDATED", savedItem.getCategory(), savedItem.getName(),
                 savedItem.getQuantity());
+
+        // Editing the expiry date can also move an item straight into the
+        // 0-3 day window — check the same way a fresh add does.
+        userRepository.findById(userId)
+                .ifPresent(user -> expiryAlertService.generateIfDue(savedItem, user, LocalDate.now()));
+
         return FoodItemResponse.from(savedItem);
     }
 
@@ -282,14 +298,7 @@ public class FoodItemService {
 
         FoodItem saved = foodItemRepository.save(item);
 
-        FoodActivityLog activityLog = FoodActivityLog.builder()
-                .userId(userId)
-                .type("DONATED")
-                .category(saved.getCategory())
-                .itemName(saved.getName())
-                .quantity(saved.getQuantity())
-                .build();
-        activityLogRepository.save(activityLog);
+        activityLogService.record(userId, "DONATED", saved.getCategory(), saved.getName(), saved.getQuantity());
 
         notifyEveryoneOfNewDonation(saved, userId);
 
@@ -309,14 +318,7 @@ public class FoodItemService {
             throw new ApiException("This item has already been donated.", HttpStatus.BAD_REQUEST);
         }
 
-        FoodActivityLog activityLog = FoodActivityLog.builder()
-                .userId(userId)
-                .type("USED")
-                .category(item.getCategory())
-                .itemName(item.getName())
-                .quantity(item.getQuantity())
-                .build();
-        activityLogRepository.save(activityLog);
+        activityLogService.record(userId, "USED", item.getCategory(), item.getName(), item.getQuantity());
 
         FoodItemResponse response = FoodItemResponse.from(item);
         foodItemRepository.delete(item);
@@ -372,13 +374,7 @@ public class FoodItemService {
 
         boolean isExpired = item.getExpiryDate() != null && item.getExpiryDate().isBefore(LocalDate.now());
         if (isExpired && !Boolean.TRUE.equals(item.getDonated())) {
-            activityLogRepository.save(FoodActivityLog.builder()
-                    .userId(userId)
-                    .type("WASTED")
-                    .category(item.getCategory())
-                    .itemName(item.getName())
-                    .quantity(item.getQuantity())
-                    .build());
+            activityLogService.record(userId, "WASTED", item.getCategory(), item.getName(), item.getQuantity());
         } else {
             // Manually removing an item that hadn't expired yet isn't waste —
             // still worth a feed entry so "Deleted X" shows up for the user.

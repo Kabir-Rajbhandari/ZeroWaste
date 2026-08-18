@@ -7,17 +7,6 @@ import com.zerowaste.zerowaste.model.Notification;
 import com.zerowaste.zerowaste.repository.FoodActivityLogRepository;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 
-/**
- * Records what a specific user did — add / update / use / donate / waste /
- * remove / request / plan a meal — so the Recent Activity feed on their
- * dashboard reflects their own actions across the whole site, not just item
- * usage/donation. Every write here is tagged with the acting user's id, so
- * one person's activity never bleeds into another's feed.
- *
- * Every entry logged here is also mirrored into a simple, first-person
- * notification for that same user, so nothing on the Recent Activity feed
- * is missed by someone who only checks their Notifications.
- */
 @Service
 public class ActivityLogService {
 
@@ -42,12 +31,6 @@ public class ActivityLogService {
         notifyOwnActivity(userId, type, itemName);
     }
 
-    /**
-     * Builds a short, plain-language notification describing the activity
-     * that was just logged and saves it for the acting user. Kept
-     * unread/unresolved-by-default like any other notification, so it
-     * bumps the unread badge same as the rest.
-     */
     private void notifyOwnActivity(Long userId, String type, String itemName) {
         String name = (itemName == null || itemName.isBlank()) ? "an item" : itemName;
 
@@ -72,8 +55,8 @@ public class ActivityLogService {
                 notifCategory = "System";
                 break;
             case "DONATED":
-                title = "Donation Listed";
-                message = "You put \"" + name + "\" up for donation.";
+                title = "Donation Completed";
+                message = "You donated \"" + name + "\". It's now visible to others in Browse Food Item.";
                 notifCategory = "Donations";
                 break;
             case "WASTED":
@@ -95,6 +78,16 @@ public class ActivityLogService {
                 title = "Meal Planned";
                 message = "You planned a meal: " + name + ".";
                 notifCategory = "Reminders";
+                break;
+            case "LISTED_FOR_DONATION":
+                title = "Listed for Donation";
+                message = "You listed \"" + name + "\" for donation. Finish it from your Donation Listing.";
+                notifCategory = "Donations";
+                break;
+            case "REVERTED_TO_INVENTORY":
+                title = "Moved Back to Inventory";
+                message = "You moved \"" + name + "\" back to your Food Inventory.";
+                notifCategory = "System";
                 break;
             default:
                 title = "Activity";

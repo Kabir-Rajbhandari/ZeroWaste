@@ -1,10 +1,10 @@
 package com.zerowaste.zerowaste.controller;
 
-import com.zerowaste.zerowaste.dto.NotificationResponse;
-import com.zerowaste.zerowaste.service.DonationRequestService;
-import com.zerowaste.zerowaste.service.NotificationService;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,8 +12,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
+import com.zerowaste.zerowaste.dto.NotificationResponse;
+import com.zerowaste.zerowaste.service.DonationRequestService;
+import com.zerowaste.zerowaste.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -60,6 +61,14 @@ public class NotificationController {
             @AuthenticationPrincipal Long userId) {
 
         return notificationService.markRead(id, userId);
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Long userId) {
+
+        notificationService.delete(id, userId);
     }
 
     @PostMapping("/{id}/accept")

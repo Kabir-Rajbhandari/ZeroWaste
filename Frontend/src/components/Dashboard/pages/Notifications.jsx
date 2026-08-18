@@ -1,12 +1,62 @@
 // src/components/Dashboard/pages/Notifications.jsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronsRight, ChevronsLeft, Check } from "lucide-react";
+import { ChevronsRight, ChevronsLeft, Trash2 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { notificationApi } from "../../../services/api";
 
 const TABS = ["All", "Alerts", "Donations", "Reminders", "System"];
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
+
+function resolveDestination(notification) {
+  const explicit = notification.route || notification.path || notification.link;
+
+  if (explicit) return explicit;
+
+  switch (notification.type) {
+    case "EXPIRY_ALERT":
+    case "DONATION_ACCEPTED":
+    case "ACTIVITY_ADDED":
+    case "ACTIVITY_UPDATED":
+    case "ACTIVITY_REMOVED":
+    case "ACTIVITY_REVERTED_TO_INVENTORY":
+      return "inventory";
+
+    case "NEW_DONATION":
+    case "DONATION_DECLINED":
+    case "ACTIVITY_REQUESTED":
+    case "ACTIVITY_DONATED":
+      return "browse";
+
+    case "DONATION_REQUEST":
+    case "ACTIVITY_LISTED_FOR_DONATION":
+      return "donation-listing";
+
+    case "ACTIVITY_USED":
+    case "ACTIVITY_WASTED":
+      return "analytics";
+
+    case "ACTIVITY_MEAL_PLANNED":
+    case "MEAL_PLAN_REMINDER":
+      return "meal-planner";
+
+    case "PASSWORD_CHANGED":
+    case "TWO_FACTOR_ON":
+    case "TWO_FACTOR_OFF":
+    case "NOTIFICATIONS_ON":
+    case "NOTIFICATIONS_OFF":
+    case "EXPIRY_ALERTS_ON":
+    case "EXPIRY_ALERTS_OFF":
+    case "DONATION_UPDATES_ON":
+    case "DONATION_UPDATES_OFF":
+    case "PRIVACY_PUBLIC":
+    case "PRIVACY_PRIVATE":
+      return "settings";
+
+    default:
+      return null;
+  }
+}
 
 function timeAgo(isoString) {
   if (!isoString) return "";
@@ -51,6 +101,7 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
 
   const [actioningId, setActioningId] = useState(null);
   const [actionErr, setActionErr] = useState("");
+  const [removingId, setRemovingId] = useState(null);
 
   /*
    * Load notifications.
@@ -140,7 +191,11 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
 
   /*
    * Handle notification click.
-   *   */
+   *
+   * Clicking anywhere on the card marks it read, then follows the
+   * notification's destination (if it has one) — no separate "mark as
+   * read" button needed.
+   */
   const handleNotificationClick = async (notification) => {
     setActionErr("");
 
@@ -158,51 +213,10 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
       }
     }
 
-    /*
-     * Expiry notifications should always navigate
-     * to the user's Food Inventory.
-
-     */
-    if (notification.type === "EXPIRY_ALERT") {
-      if (onNavigate) {
-        onNavigate("inventory", notification);
-      }
-
-      return;
-    }
-
-    /*
-     * Other notifications can provide their own destination
-     * if available.
-     */
-    const destination =
-      notification.route || notification.path || notification.link;
+    const destination = resolveDestination(notification);
 
     if (destination && onNavigate) {
       onNavigate(destination, notification);
-    }
-  };
-
-  /*
-   * Mark a single notification as read, without navigating anywhere
-   * (unlike clicking the card itself, which also marks it read but then
-   * follows the notification's destination).
-   */
-  const handleMarkOneRead = async (id) => {
-    setActionErr("");
-
-    try {
-      await notificationApi.markRead(id);
-
-      setNotifications((prev) =>
-        prev.map((notification) =>
-          notification.id === id
-            ? { ...notification, read: true }
-            : notification,
-        ),
-      );
-    } catch (err) {
-      setActionErr(err.message || "Failed to mark notification as read.");
     }
   };
 
@@ -266,6 +280,34 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
     }
   };
 
+  /*
+   * Permanently remove a single notification. If removing it empties the
+   * current page (and it isn't page 1), step back a page so the person
+   * isn't left staring at a blank page.
+   */
+  const handleRemove = async (id) => {
+    setRemovingId(id);
+    setActionErr("");
+
+    try {
+      await notificationApi.remove(id);
+
+      setNotifications((prev) =>
+        prev.filter((notification) => notification.id !== id),
+      );
+
+      setPage((current) =>
+        current > 1 && filtered.length - 1 <= (current - 1) * PAGE_SIZE
+          ? current - 1
+          : current,
+      );
+    } catch (err) {
+      setActionErr(err.message || "Failed to remove this notification.");
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   return (
     <div>
       <style>
@@ -298,6 +340,22 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
             opacity: 1;
             transform: translateY(-1px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+          }
+
+          .remove-btn {
+            opacity: 0.65;
+            border-color: #D96868 !important;
+            color: #C0392B !important;
+            transition:
+              opacity 0.2s ease,
+              background 0.25s ease,
+              color 0.25s ease,
+              border-color 0.25s ease;
+          }
+
+          .remove-btn:hover:not(:disabled) {
+            opacity: 1;
+            background: #FDECEC;
           }
 
           .notification-card {
@@ -492,7 +550,7 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
                   )}
                 </div>
 
-                {/* Timestamp + per-item mark-as-read */}
+                {/* Timestamp + remove */}
                 <div className="d-flex flex-column align-items-end gap-2 flex-shrink-0">
                   <span
                     className="rounded-2 px-3 py-1 small fw-semibold"
@@ -506,30 +564,36 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
                     {timeAgo(notification.createdAt)}
                   </span>
 
-                  {!notification.read && (
-                    <button
-                      type="button"
-                      className="btn btn-sm mark-btn d-flex align-items-center gap-1"
-                      title="Mark as read"
-                      style={{
-                        border: `1px solid ${colors.greenLrgb}`,
-                        borderRadius: 4,
-                        background: "transparent",
-                        fontWeight: 600,
-                        padding: "0.2rem 0.6rem",
-                        fontSize: "0.78rem",
-                        color: colors.greenXd,
-                        whiteSpace: "nowrap",
-                      }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleMarkOneRead(notification.id);
-                      }}
-                    >
-                      <Check size={13} strokeWidth={2.5} />
-                      Mark as read
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="btn btn-sm remove-btn d-flex align-items-center gap-1"
+                    title={
+                      isActionable
+                        ? "Accept or decline this request before removing it"
+                        : "Remove notification"
+                    }
+                    aria-label="Remove notification"
+                    style={{
+                      border: `1px solid ${colors.greenLrgb}`,
+                      borderRadius: 4,
+                      background: "transparent",
+                      fontWeight: 600,
+                      padding: "0.2rem 0.6rem",
+                      fontSize: "0.8rem",
+                      color: colors.muted,
+                      whiteSpace: "nowrap",
+                      opacity: isActionable ? 0.4 : undefined,
+                      cursor: isActionable ? "not-allowed" : "pointer",
+                    }}
+                    disabled={removingId === notification.id || isActionable}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRemove(notification.id);
+                    }}
+                  >
+                    <Trash2 size={13} strokeWidth={2} />
+                    Delete
+                  </button>
                 </div>
               </div>
             );

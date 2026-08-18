@@ -768,15 +768,10 @@ export default function Analytics() {
           )}
         </div>
 
-        {/* =================================================
+        {/* 
             FILTER CONTROLS
-
-            IMPORTANT:
-            Weekly / Monthly / Yearly buttons have been
-            completely removed.
-
-            DateRangePicker is now the only period filter.
-            ================================================= */}
+            DateRangePicker is only period filter.
+            */}
         <div
           id="analytics-export-controls"
           className="d-flex align-items-center gap-3 flex-wrap"
@@ -852,9 +847,7 @@ export default function Analytics() {
         <div className="alert alert-danger py-2 small mb-3">{errMsg}</div>
       )}
 
-      {/* =====================================================
-          CONTENT STATES
-          ===================================================== */}
+      {/* CONTENT STATES */}
 
       {/* Waiting for second date */}
       {awaitingCustomRange ? (
@@ -904,9 +897,9 @@ export default function Analytics() {
         </div>
       ) : (
         <>
-          {/* =================================================
+          {/* 
               STAT CARDS
-              ================================================= */}
+              */}
           <div className="d-flex flex-wrap gap-3 mb-4">
             <StatCard
               icon={Leaf}
@@ -933,9 +926,9 @@ export default function Analytics() {
             />
           </div>
 
-          {/* =================================================
+          {/* 
               CHARTS
-              ================================================= */}
+              */}
           <div className="row g-4">
             {/* Inventory Overview */}
             <div className="col-12 col-lg-4 analytics-chart-container">
@@ -1105,9 +1098,9 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* =================================================
+          {/* 
               LOGGED ACTIVITIES
-              ================================================= */}
+              */}
           <div className="row g-4 mt-1">
             <div className="col-12 analytics-chart-container">
               <div
