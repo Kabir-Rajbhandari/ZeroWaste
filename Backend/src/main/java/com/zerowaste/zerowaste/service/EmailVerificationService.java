@@ -19,7 +19,8 @@ public class EmailVerificationService {
     @Value("${app.mail.from}")
     private String mailFrom;
 
-    @Value("${app.frontend.url:http://localhost:5173}")
+    // @Value("${app.frontend.url:http://localhost:5173}")
+    @Value("${app.frontend.base-url:${app.frontend.url:http://localhost:5173}}")
     private String frontendBaseUrl;
 
     public EmailVerificationService(JavaMailSender mailSender) {
