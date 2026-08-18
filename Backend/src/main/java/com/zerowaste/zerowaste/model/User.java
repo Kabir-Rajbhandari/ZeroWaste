@@ -5,13 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -42,15 +43,18 @@ public class User {
 
     /**
      * The actual image bytes, persisted in the database instead of the local
-     * filesystem so profile pictures survive redeploys/restarts and work
-     * across multiple app instances. Served back out via
-     * GET /api/users/{id}/profile-image.
+     * filesystem so profile pictures survive redeploys/restarts and work across
+     * multiple app instances. Served back out via GET
+     * /api/users/{id}/profile-image.
      */
-    @Lob
-    @Column(name = "profile_image_data")
+    @JdbcTypeCode(SqlTypes.VARBINARY)
+    @Column(name = "profile_image_data", columnDefinition = "bytea")
     private byte[] profileImageData;
 
-    /** MIME type of profileImageData (e.g. "image/png"), needed to serve it back correctly. */
+    /**
+     * MIME type of profileImageData (e.g. "image/png"), needed to serve it back
+     * correctly.
+     */
     @Column(name = "profile_image_content_type", length = 100)
     private String profileImageContentType;
 
@@ -91,17 +95,23 @@ public class User {
     private Boolean donationUpdatesEnabled = true;
 
     // ── Email verification (required once, at first login only) 
-
-    /** True once the user has clicked the verification link from their signup email. */
+    /**
+     * True once the user has clicked the verification link from their signup
+     * email.
+     */
     @Builder.Default
     @Column(name = "email_verified", columnDefinition = "boolean default false")
     private Boolean emailVerified = false;
 
-    /** Pending verification token (null once verified or never issued). */
+    /**
+     * Pending verification token (null once verified or never issued).
+     */
     @Column(name = "verification_token")
     private String verificationToken;
 
-    /** When the verification token expires (null when none is pending). */
+    /**
+     * When the verification token expires (null when none is pending).
+     */
     @Column(name = "verification_token_expires_at")
     private Instant verificationTokenExpiresAt;
 
@@ -133,12 +143,15 @@ public class User {
     // TwoFactorService and the registration-verification flow) so a
     // password-reset request can never clobber an in-progress login-2FA OTP,
     // or vice versa.
-
-    /** The 6-digit password-reset code currently pending (null when none). */
+    /**
+     * The 6-digit password-reset code currently pending (null when none).
+     */
     @Column(name = "reset_password_code", length = 6)
     private String resetPasswordCode;
 
-    /** When the reset code expires (null when none is pending). */
+    /**
+     * When the reset code expires (null when none is pending).
+     */
     @Column(name = "reset_password_code_expires_at")
     private Instant resetPasswordCodeExpiresAt;
 }
