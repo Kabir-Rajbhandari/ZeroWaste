@@ -21,8 +21,6 @@ const INITIAL_SECURITY_FORM_STATE = {
 
 const INITIAL_COMPLETE_FORM_STATE = {
   code: "",
-  newPassword: "",
-  confirmNewPassword: "",
 };
 
 const cardStyle = {
@@ -88,8 +86,6 @@ export default function Signup({ onNavigate }) {
   const [completeFieldErrors, setCompleteFieldErrors] = useState({});
   const [completeErrMsg, setCompleteErrMsg] = useState("");
   const [completeStatus, setCompleteStatus] = useState("idle");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [resendCodeStatus, setResendCodeStatus] = useState("idle");
 
   useEffect(() => {
@@ -230,10 +226,6 @@ export default function Signup({ onNavigate }) {
     const errors = {};
     if (!/^\d{6}$/.test(completeForm.code.trim()))
       errors.code = "Enter the 6-digit code from your email.";
-    if (completeForm.newPassword.length < 8)
-      errors.newPassword = "Password must be at least 8 characters.";
-    if (completeForm.newPassword !== completeForm.confirmNewPassword)
-      errors.confirmNewPassword = "Passwords do not match.";
     return Object.keys(errors).length ? errors : null;
   };
 
@@ -254,8 +246,6 @@ export default function Signup({ onNavigate }) {
       const data = await authApi.completeRegistration({
         token: verifyToken,
         code: completeForm.code.trim(),
-        newPassword: completeForm.newPassword,
-        confirmNewPassword: completeForm.confirmNewPassword,
       });
       setVerifyMessage(
         data.message || "Your account has been verified and activated!",
@@ -536,8 +526,7 @@ export default function Signup({ onNavigate }) {
                 className="mb-4 text-center"
                 style={{ ...bodyTextStyle, fontSize: "0.9rem" }}
               >
-                Enter the 6-digit code we emailed you, then set the password
-                you'll use to log in.
+                Enter the 6-digit code we emailed you to activate your account.
               </p>
 
               {completeErrMsg && (
@@ -606,96 +595,6 @@ export default function Signup({ onNavigate }) {
                   {completeFieldErrors.code && (
                     <p className="text-danger small mt-1 mb-0">
                       {completeFieldErrors.code}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="newPassword"
-                    className="form-label fw-medium text-dark mb-1"
-                    style={{ fontSize: "0.9rem" }}
-                  >
-                    New Password:
-                  </label>
-                  <div className="position-relative">
-                    <input
-                      id="newPassword"
-                      name="newPassword"
-                      type={showNewPassword ? "text" : "password"}
-                      className={`form-control signup-input rounded-3 pe-5 ${
-                        completeFieldErrors.newPassword ? "is-invalid" : ""
-                      }`}
-                      style={inputStyle}
-                      value={completeForm.newPassword}
-                      onChange={handleCompleteChange}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
-                      onClick={() => setShowNewPassword((v) => !v)}
-                      aria-label={
-                        showNewPassword ? "Hide password" : "Show password"
-                      }
-                    >
-                      {showNewPassword ? (
-                        <EyeOff size={18} />
-                      ) : (
-                        <Eye size={18} />
-                      )}
-                    </button>
-                  </div>
-                  {completeFieldErrors.newPassword && (
-                    <p className="text-danger small mt-1 mb-0">
-                      {completeFieldErrors.newPassword}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="confirmNewPassword"
-                    className="form-label fw-medium text-dark mb-1"
-                    style={{ fontSize: "0.9rem" }}
-                  >
-                    Confirm New Password:
-                  </label>
-                  <div className="position-relative">
-                    <input
-                      id="confirmNewPassword"
-                      name="confirmNewPassword"
-                      type={showConfirmNewPassword ? "text" : "password"}
-                      className={`form-control signup-input rounded-3 pe-5 ${
-                        completeFieldErrors.confirmNewPassword
-                          ? "is-invalid"
-                          : ""
-                      }`}
-                      style={inputStyle}
-                      value={completeForm.confirmNewPassword}
-                      onChange={handleCompleteChange}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y p-0 me-3 border-0 text-secondary"
-                      onClick={() => setShowConfirmNewPassword((v) => !v)}
-                      aria-label={
-                        showConfirmNewPassword
-                          ? "Hide password"
-                          : "Show password"
-                      }
-                    >
-                      {showConfirmNewPassword ? (
-                        <EyeOff size={18} />
-                      ) : (
-                        <Eye size={18} />
-                      )}
-                    </button>
-                  </div>
-                  {completeFieldErrors.confirmNewPassword && (
-                    <p className="text-danger small mt-1 mb-0">
-                      {completeFieldErrors.confirmNewPassword}
                     </p>
                   )}
                 </div>

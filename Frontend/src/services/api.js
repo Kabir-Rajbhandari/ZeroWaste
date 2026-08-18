@@ -150,12 +150,13 @@ export const authApi = {
     );
   },
 
-  // UC1, step 3 (continued): "the user enters the verification code and
-  // sets a new password" → activates the account.
-  completeRegistration({ token, code, newPassword, confirmNewPassword }) {
+  // UC1, step 3 (continued): "the user enters the verification code" →
+  // activates the account. Password is already set at registration, so
+  // only the token + code are needed here.
+  completeRegistration({ token, code }) {
     return request("/api/auth/complete-registration", {
       method: "POST",
-      body: JSON.stringify({ token, code, newPassword, confirmNewPassword }),
+      body: JSON.stringify({ token, code }),
     });
   },
 

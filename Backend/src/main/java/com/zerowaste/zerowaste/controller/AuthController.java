@@ -1,5 +1,12 @@
 package com.zerowaste.zerowaste.controller;
 
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.zerowaste.zerowaste.dto.AuthResponse;
 import com.zerowaste.zerowaste.dto.CompleteVerificationRequest;
 import com.zerowaste.zerowaste.dto.ForgotPasswordRequest;
@@ -15,13 +22,8 @@ import com.zerowaste.zerowaste.dto.ResendVerificationRequest;
 import com.zerowaste.zerowaste.dto.ResetPasswordRequest;
 import com.zerowaste.zerowaste.dto.VerificationTokenStatusResponse;
 import com.zerowaste.zerowaste.service.AuthService;
+
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -71,8 +73,9 @@ public class AuthController {
     }
 
     /**
-     * "Upon clicking the link, the user enters the verification code and sets a
-     * new password" → "System activate the account".
+     * "Upon clicking the link, the user enters the verification code" → "System
+     * activate the account". Password was already set at registration, so it
+     * isn't collected here.
      */
     @PostMapping("/complete-registration")
     public MessageResponse completeRegistration(@Valid @RequestBody CompleteVerificationRequest request) {

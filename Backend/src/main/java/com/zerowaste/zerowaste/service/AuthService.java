@@ -227,10 +227,11 @@ public class AuthService {
                 .orElseGet(() -> new VerificationTokenStatusResponse(false, false, "Invalid verification link."));
     }
 
-    // ── Step 3 (continued): code + new password → account activation ──────
+    // ── Step 3 (continued): verification code → account activation ────────
     /**
-     * "Upon clicking the link, the user enters the verification code and sets a
-     * new password" → "System activate the account".
+     * "Upon clicking the link, the user enters the verification code" → "System
+     * activate the account". Password was already set at registration, so it
+     * isn't collected or changed here.
      */
     public MessageResponse completeRegistration(CompleteVerificationRequest request) {
         User user = userRepository.findByVerificationToken(request.getToken().trim())
@@ -245,10 +246,6 @@ public class AuthService {
             throw new ApiException(
                     "This verification link has expired. Please register again or request a new email.",
                     HttpStatus.GONE);
-        }
-
-        if (!request.getNewPassword().equals(request.getConfirmNewPassword())) {
-            throw new ApiException("Passwords do not match.", HttpStatus.BAD_REQUEST);
         }
 
         // Alt-flow, Line 6: invalid or expired code → prompt the user to
@@ -269,8 +266,8 @@ public class AuthService {
                     HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
-        // ✅ Correct code + link still valid — set the new password and activate.
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        // ✅ Correct code + link still valid — activate the account. Password
+        // was already set at registration, so it isn't touched here.
         user.setEmailVerified(true);
         user.setOtpCode(null);
         user.setOtpExpiresAt(null);
