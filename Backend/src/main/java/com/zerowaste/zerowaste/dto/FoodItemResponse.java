@@ -21,6 +21,7 @@ public class FoodItemResponse {
     private String storageLocation;
     private String notes;
     private Boolean donated;
+    private Boolean listedForDonation;
     private String donorName;
     private String donorProfileImageUrl;
     private String pickupLocation;
@@ -59,6 +60,7 @@ public class FoodItemResponse {
                 item.getStorageLocation(),
                 item.getNotes(),
                 item.getDonated(),
+                item.getListedForDonation(),
                 donorName,
                 donorProfileImageUrl,
                 item.getPickupLocation(),

@@ -51,6 +51,10 @@ function getActivityConfig(type) {
       return { bg: "#F3F4F6", color: "#4B5563", label: "Removed" };
     case "MEAL_PLANNED":
       return { bg: "#EDE7F6", color: "#5E35B1", label: "Meal Planned" };
+    case "LISTED_FOR_DONATION":
+      return { bg: "#E0F2F1", color: "#00695C", label: "Listed for Donation" };
+    case "REVERTED_TO_INVENTORY":
+      return { bg: "#F3F4F6", color: "#4B5563", label: "Reverted" };
     default:
       return { bg: "#E8F5E9", color: "#2E7D32", label: "Activity" };
   }
@@ -78,6 +82,10 @@ function describeActivity(entry) {
       return name && name !== "an item"
         ? `Planned meal: ${name}`
         : "Planned a meal";
+    case "LISTED_FOR_DONATION":
+      return `Listed ${name} for donation`;
+    case "REVERTED_TO_INVENTORY":
+      return `Reverted ${name} to inventory`;
     default:
       return entry.title || `${type} ${name}`;
   }

@@ -7,8 +7,8 @@ import {
 } from "../../utils/auth";
 
 const fieldBoxStyle = {
-  border: `2px solid ${colors.greenLrgb}`,
-  borderRadius: 10,
+  border: `2px solid ${colors.greenL}`,
+  borderRadius: 6,
   padding: "0.65rem 0.9rem",
   fontFamily: fonts.body,
   fontSize: "0.95rem",
@@ -103,7 +103,7 @@ export default function DonateModal({ item, onCancel, onConfirm }) {
       <style>
         {`
           .donate-btn {
-            opacity: 0.75;
+            opacity: 0.85;
             transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
           }
 
@@ -113,10 +113,9 @@ export default function DonateModal({ item, onCancel, onConfirm }) {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
           }
 
+
           .cancel-btn:hover{
             opacity: 1 !important;
-            background:${colors.greenLrgb};
-            border-color: transparent;
           }
         `}
       </style>
@@ -187,10 +186,10 @@ export default function DonateModal({ item, onCancel, onConfirm }) {
             style={{
               ...btnPrimaryStyle,
               borderRadius: 4,
-              fontWeight: 600,
+              fontWeight: 400,
+              padding: "0.45rem",
+              fontSize: "0.85rem",
               color: colors.white,
-              padding: "0.45rem 1.15rem",
-              fontSize: "0.9rem",
             }}
             onClick={handleDonateClick}
             disabled={submitting}
@@ -202,11 +201,10 @@ export default function DonateModal({ item, onCancel, onConfirm }) {
             className="btn px-4 fw-bold cancel-btn"
             style={{
               opacity: 0.65,
-              borderColor: colors.green,
               color: colors.charcoal,
               fontWeight: 600,
               borderRadius: 4,
-              borderWidth: "2px",
+              border: "none",
               padding: "0.45rem 1.25rem",
               fontSize: "0.9rem",
               transition: "all 0.5s ease",

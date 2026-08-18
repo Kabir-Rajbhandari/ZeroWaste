@@ -52,6 +52,16 @@ public class FoodItemController {
         return foodItemService.getAvailableForBrowse(userId);
     }
 
+    /**
+     * Items the user has moved into their Donation Listing via "Convert to
+     * Donation", pending the final "Convert Donation" step or a revert back to
+     * the inventory.
+     */
+    @GetMapping("/donation-listing")
+    public List<FoodItemResponse> donationListing(@AuthenticationPrincipal Long userId) {
+        return foodItemService.getDonationListingForUser(userId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public FoodItemResponse create(
@@ -73,6 +83,32 @@ public class FoodItemController {
         return foodItemService.markUsed(id, userId);
     }
 
+    /**
+     * Step 1 of the donation flow (UC: "Convert to Donation"). Only allowed
+     * while the item is 1–7 days from expiring; the service throws a
+     * BAD_REQUEST with a specific message otherwise, which the frontend
+     * surfaces in a popup.
+     */
+    @PostMapping("/{id}/list-for-donation")
+    public FoodItemResponse listForDonation(@PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        return foodItemService.listForDonation(id, userId);
+    }
+
+    /**
+     * Sends an item from the Donation Listing back to the regular Food
+     * Inventory.
+     */
+    @PostMapping("/{id}/revert-to-inventory")
+    public FoodItemResponse revertToInventory(@PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        return foodItemService.revertToInventory(id, userId);
+    }
+
+    /**
+     * Step 2 of the donation flow (UC: "Convert Donation" from the Donation
+     * Listing) — collects pickup location / availability / contact and makes
+     * the item visible in Browse Food Item. Requires the item to already be in
+     * the Donation Listing (see /list-for-donation above).
+     */
     @PostMapping("/{id}/donate")
     public FoodItemResponse donate(
             @PathVariable Long id,

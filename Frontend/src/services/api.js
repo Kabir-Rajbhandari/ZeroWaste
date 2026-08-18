@@ -76,6 +76,27 @@ export const foodApi = {
     return request("/api/food-items/browse", { method: "GET" });
   },
 
+  // Items moved into the Donation Listing via "Convert to Donation", not
+  // yet finalized into a public donation.
+  getDonationListing() {
+    return request("/api/food-items/donation-listing", { method: "GET" });
+  },
+
+  // Step 1: move an item from the inventory into the Donation Listing.
+  // Only allowed while the item is 1–7 days from expiring.
+  listForDonation(id) {
+    return request(`/api/food-items/${id}/list-for-donation`, {
+      method: "POST",
+    });
+  },
+
+  // Send an item back from the Donation Listing to the regular inventory.
+  revertToInventory(id) {
+    return request(`/api/food-items/${id}/revert-to-inventory`, {
+      method: "POST",
+    });
+  },
+
   getRecentActivity(limit = 6) {
     return request(
       `/api/food-items/recent-activity?limit=${encodeURIComponent(limit)}`,
@@ -150,13 +171,12 @@ export const authApi = {
     );
   },
 
-  // UC1, step 3 (continued): "the user enters the verification code" →
-  // activates the account. Password is already set at registration, so
-  // only the token + code are needed here.
-  completeRegistration({ token, code }) {
+  // UC1, step 3 (continued): "the user enters the verification code and
+  // sets a new password" → activates the account.
+  completeRegistration({ token, code, newPassword, confirmNewPassword }) {
     return request("/api/auth/complete-registration", {
       method: "POST",
-      body: JSON.stringify({ token, code }),
+      body: JSON.stringify({ token, code, newPassword, confirmNewPassword }),
     });
   },
 

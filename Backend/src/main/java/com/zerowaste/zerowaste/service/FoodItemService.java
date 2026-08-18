@@ -2,6 +2,7 @@ package com.zerowaste.zerowaste.service;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +33,14 @@ public class FoodItemService {
     private static final Set<String> ALLOWED_CATEGORIES = Set.of("Dairy", "Meat", "Fruits", "Vegetable", "Other");
     private static final Set<String> ALLOWED_UNITS = Set.of("Kg", "Ltr", "Gram");
 
+    /**
+     * Window (inclusive on both ends) in which an item can be moved into the
+     * Donation Listing: it must be "nearing expiry" — not already expired, and
+     * not so far out that donating it yet would be premature.
+     */
+    private static final long MIN_DAYS_BEFORE_EXPIRY_FOR_DONATION = 1;
+    private static final long MAX_DAYS_BEFORE_EXPIRY_FOR_DONATION = 7;
+
     private final FoodItemRepository foodItemRepository;
     private final UserRepository userRepository;
     private final DonationClaimRequestRepository claimRequestRepository;
@@ -56,6 +65,22 @@ public class FoodItemService {
     public List<FoodItemResponse> getAllForUser(Long userId) {
         return foodItemRepository.findByUserIdOrderByExpiryDateAsc(userId).stream()
                 .filter(item -> !Boolean.TRUE.equals(item.getDonated()))
+                // Items already moved to the Donation Listing live there, not
+                // in the main inventory view, until reverted or finalized.
+                .filter(item -> !Boolean.TRUE.equals(item.getListedForDonation()))
+                .map(FoodItemResponse::from)
+                .toList();
+    }
+
+    /**
+     * Items the user has moved into their Donation Listing via "Convert to
+     * Donation", pending the final "Convert Donation" step (pickup details) or
+     * a revert back to the inventory.
+     */
+    public List<FoodItemResponse> getDonationListingForUser(Long userId) {
+        return foodItemRepository
+                .findByUserIdAndListedForDonationTrueAndDonatedFalseOrderByExpiryDateAsc(userId)
+                .stream()
                 .map(FoodItemResponse::from)
                 .toList();
     }
@@ -153,9 +178,99 @@ public class FoodItemService {
         return FoodItemResponse.from(savedItem);
     }
 
+    /**
+     * Step 1 of the donation flow: "User selects item nearing expiry and clicks
+     * 'Convert to Donation'." Moves the item out of the main inventory and into
+     * the Donation Listing — it is NOT yet publicly visible in Browse Food
+     * Item. Only allowed while the item is between 1 and 7 days from expiring
+     * (inclusive); anything more/less than that is rejected with a specific
+     * message so the frontend can show it in a popup.
+     */
+    public FoodItemResponse listForDonation(Long id, Long userId) {
+        FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
+
+        if (Boolean.TRUE.equals(item.getDonated())) {
+            throw new ApiException("This item has already been donated.", HttpStatus.BAD_REQUEST);
+        }
+        if (Boolean.TRUE.equals(item.getListedForDonation())) {
+            throw new ApiException("This item is already in your Donation Listing.", HttpStatus.BAD_REQUEST);
+        }
+        if (item.getExpiryDate() == null) {
+            throw new ApiException("This item has no expiry date set.", HttpStatus.BAD_REQUEST);
+        }
+
+        long daysUntilExpiry = ChronoUnit.DAYS.between(LocalDate.now(), item.getExpiryDate());
+
+        if (daysUntilExpiry < MIN_DAYS_BEFORE_EXPIRY_FOR_DONATION) {
+            throw new ApiException(
+                    "This item has already expired or expires today, so it can no longer be listed for donation.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (daysUntilExpiry > MAX_DAYS_BEFORE_EXPIRY_FOR_DONATION) {
+            throw new ApiException(
+                    "This item isn't close enough to its expiry date yet. Items can only be listed for "
+                    + "donation once they're within 7 days of expiring.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        item.setListedForDonation(true);
+        FoodItem saved = foodItemRepository.save(item);
+
+        activityLogService.record(userId, "LISTED_FOR_DONATION", saved.getCategory(), saved.getName(),
+                saved.getQuantity());
+
+        return FoodItemResponse.from(saved);
+    }
+
+    /**
+     * Sends an item from the Donation Listing back to the regular Food
+     * Inventory (the "revert to the food inventory" action).
+     */
+    public FoodItemResponse revertToInventory(Long id, Long userId) {
+        FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
+
+        if (Boolean.TRUE.equals(item.getDonated())) {
+            throw new ApiException("This item has already been donated and can no longer be reverted.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (!Boolean.TRUE.equals(item.getListedForDonation())) {
+            throw new ApiException("This item isn't in your Donation Listing.", HttpStatus.BAD_REQUEST);
+        }
+
+        item.setListedForDonation(false);
+        FoodItem saved = foodItemRepository.save(item);
+
+        activityLogService.record(userId, "REVERTED_TO_INVENTORY", saved.getCategory(), saved.getName(),
+                saved.getQuantity());
+
+        return FoodItemResponse.from(saved);
+    }
+
+    /**
+     * Step 2 of the donation flow: "Convert Donation" from the Donation
+     * Listing. Requires the item to already be listed (step 1 above) —
+     * attempting to donate straight from the inventory is rejected. This is
+     * also where the item finally becomes visible in Browse Food Item.
+     */
     public FoodItemResponse donate(Long id, Long userId, DonateRequest request) {
         FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
+
+        if (Boolean.TRUE.equals(item.getDonated())) {
+            throw new ApiException("This item has already been donated.", HttpStatus.BAD_REQUEST);
+        }
+        if (!Boolean.TRUE.equals(item.getListedForDonation())) {
+            throw new ApiException(
+                    "Add this item to your Donation Listing first (\"Convert to Donation\"), then finish it "
+                    + "from there.",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (item.getExpiryDate() != null && item.getExpiryDate().isBefore(LocalDate.now())) {
+            throw new ApiException("This item has already expired and can no longer be donated.",
+                    HttpStatus.BAD_REQUEST);
+        }
 
         item.setDonated(true);
 
@@ -167,7 +282,14 @@ public class FoodItemService {
 
         FoodItem saved = foodItemRepository.save(item);
 
-        activityLogService.record(userId, "DONATED", saved.getCategory(), saved.getName(), saved.getQuantity());
+        FoodActivityLog activityLog = FoodActivityLog.builder()
+                .userId(userId)
+                .type("DONATED")
+                .category(saved.getCategory())
+                .itemName(saved.getName())
+                .quantity(saved.getQuantity())
+                .build();
+        activityLogRepository.save(activityLog);
 
         notifyEveryoneOfNewDonation(saved, userId);
 
@@ -187,7 +309,14 @@ public class FoodItemService {
             throw new ApiException("This item has already been donated.", HttpStatus.BAD_REQUEST);
         }
 
-        activityLogService.record(userId, "USED", item.getCategory(), item.getName(), item.getQuantity());
+        FoodActivityLog activityLog = FoodActivityLog.builder()
+                .userId(userId)
+                .type("USED")
+                .category(item.getCategory())
+                .itemName(item.getName())
+                .quantity(item.getQuantity())
+                .build();
+        activityLogRepository.save(activityLog);
 
         FoodItemResponse response = FoodItemResponse.from(item);
         foodItemRepository.delete(item);
@@ -198,10 +327,8 @@ public class FoodItemService {
      * Broadcasts "X has put Y up for donation" to every other user, so anyone
      * browsing can find out about new donations without having to keep
      * refreshing Browse Food Item. Only fires when the donor's donations are
-     * set to public — if the donor is private, nobody else is told, and only
-     * the donor gets a notification (their own "Donation Listed" confirmation,
-     * added automatically by ActivityLogService when the DONATED event above
-     * is recorded).
+     * set to public — a private donation stays private, including the fact that
+     * it exists.
      */
     private void notifyEveryoneOfNewDonation(FoodItem item, Long donorId) {
         User donor = userRepository.findById(donorId).orElseThrow(() -> new ApiException("User not found.", HttpStatus.NOT_FOUND));
@@ -245,7 +372,13 @@ public class FoodItemService {
 
         boolean isExpired = item.getExpiryDate() != null && item.getExpiryDate().isBefore(LocalDate.now());
         if (isExpired && !Boolean.TRUE.equals(item.getDonated())) {
-            activityLogService.record(userId, "WASTED", item.getCategory(), item.getName(), item.getQuantity());
+            activityLogRepository.save(FoodActivityLog.builder()
+                    .userId(userId)
+                    .type("WASTED")
+                    .category(item.getCategory())
+                    .itemName(item.getName())
+                    .quantity(item.getQuantity())
+                    .build());
         } else {
             // Manually removing an item that hadn't expired yet isn't waste —
             // still worth a feed entry so "Deleted X" shows up for the user.

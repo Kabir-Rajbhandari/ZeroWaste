@@ -7,6 +7,7 @@ import {
   BarChart2,
   Settings,
   LogOut,
+  HeartHandshake,
 } from "lucide-react";
 import { colors, fonts } from "../../theme";
 import { clearAuth } from "../../utils/auth";
@@ -14,6 +15,7 @@ import { clearAuth } from "../../utils/auth";
 const NAV_ITEMS = [
   { id: "overview", label: "Dashboard", icon: LayoutDashboard },
   { id: "inventory", label: "Food Inventory", icon: Package },
+  { id: "donation-listing", label: "Donation Listing", icon: HeartHandshake },
   { id: "browse", label: "Browse Food Item", icon: Search },
   { id: "expiry", label: "Expiry Alerts", icon: Bell },
   { id: "meal-planner", label: "Meal Planner", icon: CalendarDays },

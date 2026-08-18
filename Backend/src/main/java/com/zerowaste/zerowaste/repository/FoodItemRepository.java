@@ -19,6 +19,13 @@ public interface FoodItemRepository extends JpaRepository<FoodItem, Long> {
     Optional<FoodItem> findByIdAndUserId(Long id, Long userId);
 
     /**
+     * Items the user has moved into their Donation Listing (via "Convert to
+     * Donation") but not yet finalized into a public donation (via "Convert
+     * Donation" + pickup details).
+     */
+    List<FoodItem> findByUserIdAndListedForDonationTrueAndDonatedFalseOrderByExpiryDateAsc(Long userId);
+
+    /**
      * Finds active food items whose expiry date falls between the supplied
      * start and end dates, inclusive.
      */

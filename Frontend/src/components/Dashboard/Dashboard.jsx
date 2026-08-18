@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import DashboardLayout from "./DashboardLayout";
 import DashboardHome from "./pages/DashboardHome";
 import FoodInventory from "./pages/FoodInventory";
+import DonationListing from "./pages/DonationListing";
 import BrowseFoodItem from "./pages/BrowseFoodItem";
 import AddFoodItem from "./pages/AddFoodItem";
 import EditFoodItem from "./pages/EditfoodItem";
@@ -78,6 +79,9 @@ export default function Dashboard({ onNavigate }) {
 
       case "inventory":
         return <FoodInventory onNavigate={handleNavigate} />;
+
+      case "donation-listing":
+        return <DonationListing onNavigate={handleNavigate} />;
 
       case "browse":
         return <BrowseFoodItem onNavigate={handleNavigate} />;

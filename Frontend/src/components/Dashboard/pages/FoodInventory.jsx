@@ -12,7 +12,6 @@ import {
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi } from "../../../services/api";
 import { logActivity } from "../../../utils/activitylog";
-import DonateModal from "../DonateModal";
 
 const CATEGORIES = [
   "All Categories",
@@ -55,6 +54,7 @@ function InlineConfirmDialog({
   onCancel,
   confirmLabel = "OK",
   cancelLabel = "Cancel",
+  showCancel = true,
 }) {
   if (!open) return null;
 
@@ -80,7 +80,7 @@ function InlineConfirmDialog({
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: colors.authBg || "#ffffff",
+          background: colors.authBg || colors.white,
           color: colors.charcoal,
           borderRadius: 12,
           maxWidth: 540,
@@ -106,32 +106,36 @@ function InlineConfirmDialog({
         </p>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          {showCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: "8px 14px",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontWeight: 600,
+                color: colors.charcoal,
+              }}
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
-            type="button"
-            onClick={onCancel}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: "8px 14px",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontWeight: 600,
-              color: colors.charcoal,
-            }}
-          >
-            {cancelLabel}
-          </button>
-          <button
+            className="btn-convert"
             type="button"
             onClick={onConfirm}
             style={{
-              background: colors.green,
-              color: "#fff",
-              border: "none",
+              backgroundColor: colors.green,
+              color: colors.white,
+              border: `2px solid ${colors.greenL}`,
+              fontSize: "0.9rem",
+              borderRadius: 4,
               padding: "8px 14px",
-              borderRadius: 8,
               cursor: "pointer",
-              fontWeight: 700,
+              fontWeight: 500,
             }}
           >
             {confirmLabel}
@@ -159,10 +163,10 @@ export default function FoodInventory({ onNavigate }) {
   const [category, setCategory] = useState("All Categories");
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
-  const [donateTarget, setDonateTarget] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPayload, setConfirmPayload] = useState(null);
+  const [infoDialog, setInfoDialog] = useState(null);
   const [page, setPage] = useState(1);
 
   const loadItems = useCallback(async () => {
@@ -227,12 +231,52 @@ export default function FoodInventory({ onNavigate }) {
     }
   };
 
-  const handleDonateConfirm = async (details) => {
-    await foodApi.donate(donateTarget.id, details);
-    logActivity(`Donated ${donateTarget.name}`);
-    setItems((prev) => prev.filter((item) => item.id !== donateTarget.id));
-    setDonateTarget(null);
-    onNavigate?.("browse");
+  // Days remaining until an item's expiry date (negative/0 = expired/today).
+  const getDaysUntilExpiry = (expiryDate) => {
+    if (!expiryDate) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+    return Math.round((expiry - today) / (1000 * 60 * 60 * 24));
+  };
+
+  // UC step: "User selects item nearing expiry and clicks 'Convert to
+  // Donation.'" Only eligible between 1 and 7 days before expiry — anything
+  // else pops an interactive message instead of hitting the API.
+  const handleConvertToDonation = (item) => {
+    const daysLeft = getDaysUntilExpiry(item.expiryDate);
+    const eligible = daysLeft !== null && daysLeft >= 1 && daysLeft <= 7;
+
+    if (!eligible) {
+      setInfoDialog({
+        title: "Not eligible for donation yet",
+        message:
+          daysLeft !== null && daysLeft < 1
+            ? `"${item.name}" has already expired or expires today, so it can no longer be listed for donation.`
+            : `"${item.name}" isn't close enough to its expiry date yet. Items can only be listed for donation once they're within 7 days of expiring.`,
+      });
+      return;
+    }
+
+    setConfirmPayload({
+      type: "list-for-donation",
+      id: item.id,
+      name: item.name,
+    });
+    setConfirmOpen(true);
+  };
+
+  const doListForDonation = async (id) => {
+    const target = items.find((item) => item.id === id);
+    try {
+      await foodApi.listForDonation(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      logActivity(`Listed ${target?.name || "an item"} for donation`);
+      onNavigate?.("donation-listing");
+    } catch (err) {
+      setErrMsg(err.message || "Failed to list item for donation.");
+    }
   };
 
   const filtered = items.filter((item) => {
@@ -304,12 +348,19 @@ export default function FoodInventory({ onNavigate }) {
             box-shadow: 0 0 0 0.23rem ${colors.greenLrgb};
           }
 
-          .add-item {
+          .add-item, .btn-convert {
             opacity: 0.75;
             transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
           }
 
           .add-item:hover:not(:disabled) {
+            opacity: 1;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+          }
+
+          .btn-convert:hover:not(:disabled) {
+            background: ${colors.greenLrgb};
             opacity: 1;
             transform: translateY(-1px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
@@ -323,15 +374,17 @@ export default function FoodInventory({ onNavigate }) {
             opacity: 0.85;
           }
 
-          .donate-btn {
-            opacity: 0.75;
+          .convert-donation-btn {
+            opacity: 0.85;
             transition: opacity 0.2s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
           }
 
-          .donate-btn:hover:not(:disabled) {
+          .convert-donation-btn:hover:not(:disabled) {
             opacity: 1;
+            background: ${colors.greenLrgb};
             transform: translateY(-1px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+
           }
 
           .used-btn {
@@ -630,18 +683,19 @@ export default function FoodInventory({ onNavigate }) {
                             </button>
                             <button
                               type="button"
-                              className="btn btn-sm flex-grow-1 donate-btn"
+                              className="btn btn-sm flex-grow-1 convert-donation-btn"
                               style={{
-                                ...btnPrimaryStyle,
+                                backgroundColor: colors.green,
+                                color: colors.white,
+                                border: `2px solid ${colors.greenL}`,
                                 borderRadius: 4,
                                 fontWeight: 600,
                                 padding: "0.45rem",
                                 fontSize: "0.88rem",
-                                color: colors.white,
                               }}
-                              onClick={() => setDonateTarget(item)}
+                              onClick={() => handleConvertToDonation(item)}
                             >
-                              Donate
+                              Convert to Donation
                             </button>
                           </>
                         )}
@@ -692,22 +746,29 @@ export default function FoodInventory({ onNavigate }) {
         </div>
       )}
 
-      <DonateModal
-        item={donateTarget}
-        onCancel={() => setDonateTarget(null)}
-        onConfirm={handleDonateConfirm}
-      />
       <InlineConfirmDialog
         open={confirmOpen}
         title={
-          confirmPayload?.type === "delete" ? "Delete item" : "Mark as used"
+          confirmPayload?.type === "delete"
+            ? "Delete item"
+            : confirmPayload?.type === "list-for-donation"
+              ? "Convert to Donation"
+              : "Mark as used"
         }
         message={
           confirmPayload?.type === "delete"
             ? "Delete this food item?"
-            : "Mark this item as used? It will be removed from your inventory and counted toward Food Saved."
+            : confirmPayload?.type === "list-for-donation"
+              ? `Move "${confirmPayload?.name}" to your Donation Listing? From there you can add pickup details and finish creating the donation, or revert it back to your inventory.`
+              : "Mark this item as used? It will be removed from your inventory and counted toward Food Saved."
         }
-        confirmLabel={confirmPayload?.type === "delete" ? "Delete" : "OK"}
+        confirmLabel={
+          confirmPayload?.type === "delete"
+            ? "Delete"
+            : confirmPayload?.type === "list-for-donation"
+              ? "Convert"
+              : "OK"
+        }
         cancelLabel="Cancel"
         onCancel={() => {
           setConfirmOpen(false);
@@ -720,7 +781,18 @@ export default function FoodInventory({ onNavigate }) {
           if (!payload) return;
           if (payload.type === "delete") await doDelete(payload.id);
           if (payload.type === "used") await doMarkUsed(payload.id);
+          if (payload.type === "list-for-donation")
+            await doListForDonation(payload.id);
         }}
+      />
+      <InlineConfirmDialog
+        open={!!infoDialog}
+        title={infoDialog?.title}
+        message={infoDialog?.message}
+        confirmLabel="Got it"
+        showCancel={false}
+        onConfirm={() => setInfoDialog(null)}
+        onCancel={() => setInfoDialog(null)}
       />
     </div>
   );

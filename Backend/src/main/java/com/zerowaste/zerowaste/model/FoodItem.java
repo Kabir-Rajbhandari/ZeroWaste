@@ -65,6 +65,18 @@ public class FoodItem {
     @Column(columnDefinition = "boolean default false")
     private Boolean donated = false;
 
+    /**
+     * True once the user has clicked "Convert to Donation" on an item nearing
+     * expiry (1–7 days left). The item leaves the main Food Inventory and
+     * appears in the user's Donation Listing, but is NOT yet publicly visible
+     * in Browse Food Item — that only happens once {@link #donated} is also set
+     * to true, via the separate "Convert Donation" step (pickup
+     * location/availability/contact).
+     */
+    @Builder.Default
+    @Column(name = "listed_for_donation", columnDefinition = "boolean default false")
+    private Boolean listedForDonation = false;
+
     // Filled in by the donor when they click "Donate" on a food item (DonateModal).
     // Shown to the claimer on the Browse Food Item detail page.
     @Column(name = "pickup_location")
