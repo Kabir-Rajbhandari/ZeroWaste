@@ -167,14 +167,7 @@ public class FoodItemService {
 
         FoodItem saved = foodItemRepository.save(item);
 
-        FoodActivityLog activityLog = FoodActivityLog.builder()
-                .userId(userId)
-                .type("DONATED")
-                .category(saved.getCategory())
-                .itemName(saved.getName())
-                .quantity(saved.getQuantity())
-                .build();
-        activityLogRepository.save(activityLog);
+        activityLogService.record(userId, "DONATED", saved.getCategory(), saved.getName(), saved.getQuantity());
 
         notifyEveryoneOfNewDonation(saved, userId);
 
@@ -194,14 +187,7 @@ public class FoodItemService {
             throw new ApiException("This item has already been donated.", HttpStatus.BAD_REQUEST);
         }
 
-        FoodActivityLog activityLog = FoodActivityLog.builder()
-                .userId(userId)
-                .type("USED")
-                .category(item.getCategory())
-                .itemName(item.getName())
-                .quantity(item.getQuantity())
-                .build();
-        activityLogRepository.save(activityLog);
+        activityLogService.record(userId, "USED", item.getCategory(), item.getName(), item.getQuantity());
 
         FoodItemResponse response = FoodItemResponse.from(item);
         foodItemRepository.delete(item);
@@ -212,8 +198,10 @@ public class FoodItemService {
      * Broadcasts "X has put Y up for donation" to every other user, so anyone
      * browsing can find out about new donations without having to keep
      * refreshing Browse Food Item. Only fires when the donor's donations are
-     * set to public — a private donation stays private, including the fact that
-     * it exists.
+     * set to public — if the donor is private, nobody else is told, and only
+     * the donor gets a notification (their own "Donation Listed" confirmation,
+     * added automatically by ActivityLogService when the DONATED event above
+     * is recorded).
      */
     private void notifyEveryoneOfNewDonation(FoodItem item, Long donorId) {
         User donor = userRepository.findById(donorId).orElseThrow(() -> new ApiException("User not found.", HttpStatus.NOT_FOUND));
@@ -257,13 +245,7 @@ public class FoodItemService {
 
         boolean isExpired = item.getExpiryDate() != null && item.getExpiryDate().isBefore(LocalDate.now());
         if (isExpired && !Boolean.TRUE.equals(item.getDonated())) {
-            activityLogRepository.save(FoodActivityLog.builder()
-                    .userId(userId)
-                    .type("WASTED")
-                    .category(item.getCategory())
-                    .itemName(item.getName())
-                    .quantity(item.getQuantity())
-                    .build());
+            activityLogService.record(userId, "WASTED", item.getCategory(), item.getName(), item.getQuantity());
         } else {
             // Manually removing an item that hadn't expired yet isn't waste —
             // still worth a feed entry so "Deleted X" shows up for the user.

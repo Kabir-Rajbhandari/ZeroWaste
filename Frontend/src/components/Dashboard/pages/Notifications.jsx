@@ -1,7 +1,7 @@
 // src/components/Dashboard/pages/Notifications.jsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronsRight, ChevronsLeft } from "lucide-react";
+import { ChevronsRight, ChevronsLeft, Check } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { notificationApi } from "../../../services/api";
 
@@ -180,6 +180,29 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
 
     if (destination && onNavigate) {
       onNavigate(destination, notification);
+    }
+  };
+
+  /*
+   * Mark a single notification as read, without navigating anywhere
+   * (unlike clicking the card itself, which also marks it read but then
+   * follows the notification's destination).
+   */
+  const handleMarkOneRead = async (id) => {
+    setActionErr("");
+
+    try {
+      await notificationApi.markRead(id);
+
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          notification.id === id
+            ? { ...notification, read: true }
+            : notification,
+        ),
+      );
+    } catch (err) {
+      setActionErr(err.message || "Failed to mark notification as read.");
     }
   };
 
@@ -469,18 +492,45 @@ export default function Notifications({ onUnreadCountChange, onNavigate }) {
                   )}
                 </div>
 
-                {/* Timestamp */}
-                <span
-                  className="flex-shrink-0 rounded-2 px-3 py-1 small fw-semibold"
-                  style={{
-                    background: colors.greenLrgb,
-                    color: colors.charcoal,
-                    whiteSpace: "nowrap",
-                    opacity: 0.7,
-                  }}
-                >
-                  {timeAgo(notification.createdAt)}
-                </span>
+                {/* Timestamp + per-item mark-as-read */}
+                <div className="d-flex flex-column align-items-end gap-2 flex-shrink-0">
+                  <span
+                    className="rounded-2 px-3 py-1 small fw-semibold"
+                    style={{
+                      background: colors.greenLrgb,
+                      color: colors.charcoal,
+                      whiteSpace: "nowrap",
+                      opacity: 0.7,
+                    }}
+                  >
+                    {timeAgo(notification.createdAt)}
+                  </span>
+
+                  {!notification.read && (
+                    <button
+                      type="button"
+                      className="btn btn-sm mark-btn d-flex align-items-center gap-1"
+                      title="Mark as read"
+                      style={{
+                        border: `1px solid ${colors.greenLrgb}`,
+                        borderRadius: 4,
+                        background: "transparent",
+                        fontWeight: 600,
+                        padding: "0.2rem 0.6rem",
+                        fontSize: "0.78rem",
+                        color: colors.greenXd,
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleMarkOneRead(notification.id);
+                      }}
+                    >
+                      <Check size={13} strokeWidth={2.5} />
+                      Mark as read
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })
