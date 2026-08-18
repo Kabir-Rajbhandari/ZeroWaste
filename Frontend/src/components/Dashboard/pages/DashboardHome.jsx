@@ -15,96 +15,17 @@ import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
 import { analyticsApi, foodApi } from "../../../services/api";
 import { onActivityLogged } from "../../../utils/activitylog";
 import { useCountUp } from "../../../utils/useCountUp";
+import {
+  formatActivityTime,
+  getActivityConfig,
+  mapBackendActivity,
+  mergeActivity,
+} from "../../../utils/activityDisplay";
 
 const EXPIRING_WINDOW_DAYS = 7;
 
 const DEFAULT_IMAGE =
   "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop";
-
-function formatActivityTime(timestamp) {
-  if (!timestamp) return "Just now";
-  const date = new Date(timestamp);
-  if (isNaN(date.getTime())) return "Just now";
-
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function getActivityConfig(type) {
-  switch (type) {
-    case "ADDED":
-      return { bg: "#E8F5E9", color: "#2E7D32", label: "Added" };
-    case "UPDATED":
-      return { bg: "#E3F2FD", color: "#1565C0", label: "Updated" };
-    case "USED":
-      return { bg: "#FFF8E1", color: "#B78103", label: "Used" };
-    case "DONATED":
-      return { bg: "#F3E5F5", color: "#7B1FA2", label: "Donated" };
-    case "WASTED":
-      return { bg: "#FFEBEE", color: "#C62828", label: "Expired" };
-    case "REMOVED":
-      return { bg: "#F3F4F6", color: "#4B5563", label: "Removed" };
-    case "MEAL_PLANNED":
-      return { bg: "#EDE7F6", color: "#5E35B1", label: "Meal Planned" };
-    case "LISTED_FOR_DONATION":
-      return { bg: "#E0F2F1", color: "#00695C", label: "Listed for Donation" };
-    case "REVERTED_TO_INVENTORY":
-      return { bg: "#F3F4F6", color: "#4B5563", label: "Reverted" };
-    default:
-      return { bg: "#E8F5E9", color: "#2E7D32", label: "Activity" };
-  }
-}
-
-function describeActivity(entry) {
-  const type = entry.type || "";
-  const name = entry.itemName || entry.category || "an item";
-  switch (type) {
-    case "ADDED":
-      return `Added ${name}`;
-    case "UPDATED":
-      return `Updated ${name}`;
-    case "USED":
-      return `Used ${name}`;
-    case "DONATED":
-      return `Donated ${name}`;
-    case "WASTED":
-      return `Expired ${name}`;
-    case "REMOVED":
-      return `Removed ${name}`;
-    case "REQUESTED":
-      return `Requested ${name}`;
-    case "MEAL_PLANNED":
-      return name && name !== "an item"
-        ? `Planned meal: ${name}`
-        : "Planned a meal";
-    case "LISTED_FOR_DONATION":
-      return `Listed ${name} for donation`;
-    case "REVERTED_TO_INVENTORY":
-      return `Reverted ${name} to inventory`;
-    default:
-      return entry.title || `${type} ${name}`;
-  }
-}
-
-function mapBackendActivity(recent) {
-  return (Array.isArray(recent) ? recent : []).map((r) => ({
-    id: `backend-${r.id || Math.random()}`,
-    type: r.type || "ADDED",
-    title: describeActivity(r),
-    timestamp: r.occurredAt || r.createdAt || new Date().toISOString(),
-  }));
-}
-
-function mergeActivity(backendEntries, limit = 20) {
-  return [...backendEntries]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, limit);
-}
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;

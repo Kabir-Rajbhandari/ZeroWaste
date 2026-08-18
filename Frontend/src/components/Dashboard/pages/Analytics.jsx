@@ -1,9 +1,23 @@
-import { useEffect, useState } from "react";
-import { Leaf, HeartHandshake, Recycle, Download } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Leaf,
+  HeartHandshake,
+  Recycle,
+  Download,
+  Clock,
+  ClipboardList,
+} from "lucide-react";
 import { btnPrimaryStyle, colors, fonts, shadows } from "../../../theme";
-import { analyticsApi } from "../../../services/api";
+import { analyticsApi, foodApi } from "../../../services/api";
 import DateRangePicker, { toISODate } from "../DateRangePicker";
 import { useCountUp } from "../../../utils/useCountUp";
+import { onActivityLogged } from "../../../utils/activitylog";
+import {
+  formatActivityTime,
+  getActivityConfig,
+  mapBackendActivity,
+  mergeActivity,
+} from "../../../utils/activityDisplay";
 
 const CATEGORY_COLORS = {
   Vegetable: "#4ead77",
@@ -352,6 +366,14 @@ export default function Analytics() {
 
   const [isCategoryHovered, setIsCategoryHovered] = useState(false);
 
+  // Logged Activities panel — reuses the same activity feed as the
+  // Dashboard's "Recent Activity" card, but fetched in bulk and filtered
+  // client-side so it always matches whatever date range / category the
+  // rest of this page is currently filtered to.
+  const [rawActivity, setRawActivity] = useState([]);
+
+  const [activityLoading, setActivityLoading] = useState(true);
+
   /*
    * Build the exact date range sent to the API.
    *
@@ -440,6 +462,84 @@ export default function Analytics() {
     customRange.end,
     awaitingCustomRange,
   ]);
+
+  /*
+   * Load the logged-activity feed once (a generous limit so client-side
+   * filtering below has enough history to work with), then keep it fresh
+   * whenever a new activity is logged elsewhere in the app.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadActivity = async () => {
+      setActivityLoading(true);
+      try {
+        const recent = await foodApi.getRecentActivity?.(200);
+        if (!cancelled) {
+          setRawActivity(mergeActivity(mapBackendActivity(recent), 200));
+        }
+      } catch {
+        if (!cancelled) {
+          setRawActivity([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setActivityLoading(false);
+        }
+      }
+    };
+
+    loadActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return onActivityLogged(async () => {
+      try {
+        const recent = await foodApi.getRecentActivity?.(200);
+        setRawActivity(mergeActivity(mapBackendActivity(recent), 200));
+      } catch {
+        // keep whatever was already loaded
+      }
+    });
+  }, []);
+
+  /*
+   * Same [start, end] window the backend resolves for the charts above
+   * (see AnalyticsService#resolveRange): a custom picked range wins when
+   * present, otherwise it's the start of the current month through now.
+   */
+  const activityRange = useMemo(() => {
+    if (rangeParam) {
+      const start = new Date(customRange.start);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(customRange.end);
+      end.setHours(23, 59, 59, 999);
+
+      return { start, end };
+    }
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
+    return { start, end: now };
+  }, [rangeParam, customRange.start, customRange.end]);
+
+  const filteredActivity = useMemo(() => {
+    return rawActivity.filter((a) => {
+      const t = new Date(a.timestamp);
+
+      if (t < activityRange.start || t > activityRange.end) return false;
+
+      if (category !== "All" && a.category !== category) return false;
+
+      return true;
+    });
+  }, [rawActivity, activityRange, category]);
 
   /*
    * Clicking a chart/legend category toggles the
@@ -550,6 +650,30 @@ export default function Analytics() {
         .stat-card-animated:hover {
           transform: translateY(-8px) !important;
         }
+
+        .analytics-activity-item {
+          animation: fadeIn 0.4s ease-out backwards;
+        }
+
+        .analytics-activity-scroll {
+          max-height: 360px;
+          overflow-y: auto;
+          padding-right: 4px;
+          scrollbar-width: thin;
+        }
+
+        .analytics-activity-scroll::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .analytics-activity-scroll::-webkit-scrollbar-thumb {
+          background: rgba(78, 160, 102, 0.45);
+          border-radius: 999px;
+        }
+
+        .analytics-activity-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
       `}</style>
 
       {/* =====================================================
@@ -605,7 +729,6 @@ export default function Analytics() {
                   background: "none",
                   padding: 0,
                   color: colors.muted,
-                  textDecoration: "underline",
                   fontSize: "1.1rem",
                   fontWeight: 500,
                   cursor: "pointer",
@@ -634,8 +757,7 @@ export default function Analytics() {
                   background: "none",
                   padding: 0,
                   color: colors.muted,
-                  textDecoration: "underline",
-                  fontSize: "0.8rem",
+                  fontSize: "1.1rem",
                   fontWeight: 500,
                   cursor: "pointer",
                 }}
@@ -979,6 +1101,177 @@ export default function Analytics() {
                     {wasteBreakdown?.totalItems ?? 0}
                   </span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =================================================
+              LOGGED ACTIVITIES
+              ================================================= */}
+          <div className="row g-4 mt-1">
+            <div className="col-12 analytics-chart-container">
+              <div
+                className="rounded-4 p-4"
+                style={{
+                  background: colors.authGreen,
+                  border: `2px solid ${colors.greenLrgb}`,
+                }}
+              >
+                <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-1">
+                  <div className="d-flex align-items-start gap-2">
+                    <ClipboardList
+                      size={20}
+                      style={{ color: colors.green, marginTop: 2 }}
+                    />
+
+                    <div>
+                      <h6
+                        className="fw-bold mb-1"
+                        style={{ color: colors.charcoal }}
+                      >
+                        Logged Activities
+                      </h6>
+
+                      <p className="small mb-0" style={{ color: colors.muted }}>
+                        Every inventory, donation and meal-planning action
+                        recorded for the selected range
+                        {category !== "All"
+                          ? ` in ${CATEGORY_LABELS[category] || category}`
+                          : ""}
+                        .
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className="small fw-semibold flex-shrink-0"
+                    style={{
+                      background: colors.white,
+                      border: `1px solid ${colors.greenLrgb}`,
+                      borderRadius: 999,
+                      padding: "0.3rem 0.85rem",
+                      color: colors.green,
+                    }}
+                  >
+                    {filteredActivity.length}{" "}
+                    {filteredActivity.length === 1 ? "activity" : "activities"}
+                  </span>
+                </div>
+
+                {activityLoading ? (
+                  <div
+                    className="text-center py-4 small"
+                    style={{ color: colors.muted }}
+                  >
+                    Loading activity log…
+                  </div>
+                ) : filteredActivity.length === 0 ? (
+                  <div
+                    className="text-center py-4 small"
+                    style={{ color: colors.muted }}
+                  >
+                    No logged activity for this range yet.
+                  </div>
+                ) : (
+                  <div
+                    className="analytics-activity-scroll mt-3"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    {filteredActivity.map((a, idx) => {
+                      const config = getActivityConfig(a.type);
+
+                      return (
+                        <div
+                          key={a.id}
+                          className="analytics-activity-item"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.75rem",
+                            backgroundColor: colors.white,
+                            padding: "0.65rem 0.85rem",
+                            borderRadius: "0.75rem",
+                            border: "1px solid #E5E7EB",
+                            animationDelay: `${Math.min(idx, 20) * 30}ms`,
+                            transition:
+                              "transform 0.15s ease, box-shadow 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform =
+                              "translateY(-1px)";
+                            e.currentTarget.style.boxShadow =
+                              "0 4px 10px rgba(0, 0, 0, 0.05)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = "translateY(0)";
+                            e.currentTarget.style.boxShadow = "none";
+                          }}
+                        >
+                          <div
+                            className="d-flex align-items-center gap-2"
+                            style={{ minWidth: 0, flexGrow: 1 }}
+                          >
+                            <span
+                              className="rounded-circle flex-shrink-0"
+                              style={{
+                                width: 8,
+                                height: 8,
+                                background:
+                                  CATEGORY_COLORS[a.category] || colors.muted,
+                                border:
+                                  a.category === "Dairy"
+                                    ? `1px solid ${colors.border}`
+                                    : "none",
+                              }}
+                            />
+
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                className="small fw-semibold text-truncate"
+                                style={{ color: colors.charcoal }}
+                              >
+                                {a.title}
+                              </div>
+
+                              <div
+                                className="d-flex align-items-center gap-1"
+                                style={{
+                                  fontSize: "0.72rem",
+                                  color: colors.muted,
+                                  marginTop: "0.1rem",
+                                }}
+                              >
+                                <Clock size={11} />
+                                {formatActivityTime(a.timestamp)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <span
+                            className="flex-shrink-0"
+                            style={{
+                              fontSize: "0.65rem",
+                              fontWeight: 700,
+                              backgroundColor: config.bg,
+                              color: config.color,
+                              padding: "0.2rem 0.55rem",
+                              borderRadius: "999px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.3px",
+                            }}
+                          >
+                            {config.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
