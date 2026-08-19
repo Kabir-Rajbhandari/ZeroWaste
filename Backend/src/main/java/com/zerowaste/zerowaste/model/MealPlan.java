@@ -7,7 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,10 +16,14 @@ import lombok.Setter;
 import java.time.Instant;
 import java.time.LocalDate;
 
+// NOTE: (user_id, meal_date, meal_type) used to carry a unique constraint,
+// limiting a slot (e.g. "Wed Breakfast") to exactly one planned meal. That's
+// been removed so a slot can hold multiple entries — e.g. two different
+// leftover items both earmarked for the same lunch. Each row is still its
+// own independently editable/deletable meal entry; several rows simply now
+// share the same (user_id, meal_date, meal_type).
 @Entity
-@Table(name = "meal_plans", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"user_id", "meal_date", "meal_type"})
-})
+@Table(name = "meal_plans")
 @Getter
 @Setter
 @NoArgsConstructor

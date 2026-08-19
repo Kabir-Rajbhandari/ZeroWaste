@@ -11,6 +11,8 @@ import lombok.Setter;
 @Setter
 public class MealPlanRequest {
 
+    private Long id;
+
     @NotNull(message = "Meal date is required.")
     private LocalDate mealDate;
 

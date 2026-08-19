@@ -93,6 +93,18 @@ public class MealPlanService {
 
         if (linkedItem != null) {
             linkedItem.setReserved(true);
+            // Linking an item that's sitting in the Donation Listing (or, in
+            // principle, already public) pulls it back into plain inventory
+            // as reserved — it's earmarked for this meal now, not for
+            // donation. This is what makes "Plan for Meal" from Browse Food
+            // Item's own-listing view remove the item from Browse and revert
+            // it to the Food Inventory as reserved.
+            if (Boolean.TRUE.equals(linkedItem.getListedForDonation())) {
+                linkedItem.setListedForDonation(false);
+            }
+            if (Boolean.TRUE.equals(linkedItem.getDonated())) {
+                linkedItem.setDonated(false);
+            }
             foodItemRepository.save(linkedItem);
         }
         if (!Objects.equals(previousLinkedId, newLinkedId)) {

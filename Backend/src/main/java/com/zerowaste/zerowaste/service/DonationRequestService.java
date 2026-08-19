@@ -122,6 +122,10 @@ public class DonationRequestService {
         // Transfer ownership to the accepted requester's Food Inventory.
         item.setUserId(claimRequest.getRequesterId());
         item.setDonated(false);
+        // Also clear this — otherwise the item would still look like it's
+        // sitting in a Donation Listing (just now under the new owner),
+        // instead of landing in their plain Food Inventory where it belongs.
+        item.setListedForDonation(false);
         item.setPickupLocation(null);
         item.setAvailableTime(null);
         item.setContactDetail(null);

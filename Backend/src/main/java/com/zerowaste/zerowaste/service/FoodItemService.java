@@ -2,7 +2,9 @@ package com.zerowaste.zerowaste.service;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,11 +21,13 @@ import com.zerowaste.zerowaste.exception.ApiException;
 import com.zerowaste.zerowaste.model.DonationClaimRequest;
 import com.zerowaste.zerowaste.model.FoodActivityLog;
 import com.zerowaste.zerowaste.model.FoodItem;
+import com.zerowaste.zerowaste.model.MealPlan;
 import com.zerowaste.zerowaste.model.Notification;
 import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.DonationClaimRequestRepository;
 import com.zerowaste.zerowaste.repository.FoodActivityLogRepository;
 import com.zerowaste.zerowaste.repository.FoodItemRepository;
+import com.zerowaste.zerowaste.repository.MealPlanRepository;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
 
@@ -38,8 +42,10 @@ public class FoodItemService {
      * Donation Listing: it must be "nearing expiry" — not already expired, and
      * not so far out that donating it yet would be premature.
      */
-    private static final long MIN_DAYS_BEFORE_EXPIRY_FOR_DONATION = 1;
+    private static final long MIN_DAYS_BEFORE_EXPIRY_FOR_DONATION = 0;
     private static final long MAX_DAYS_BEFORE_EXPIRY_FOR_DONATION = 7;
+
+    private static final DateTimeFormatter RESERVATION_DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy");
 
     private final FoodItemRepository foodItemRepository;
     private final UserRepository userRepository;
@@ -48,6 +54,7 @@ public class FoodItemService {
     private final FoodActivityLogRepository activityLogRepository;
     private final ActivityLogService activityLogService;
     private final ExpiryAlertService expiryAlertService;
+    private final MealPlanRepository mealPlanRepository;
 
     public FoodItemService(FoodItemRepository foodItemRepository,
             UserRepository userRepository,
@@ -55,7 +62,8 @@ public class FoodItemService {
             NotificationRepository notificationRepository,
             FoodActivityLogRepository activityLogRepository,
             ActivityLogService activityLogService,
-            ExpiryAlertService expiryAlertService) {
+            ExpiryAlertService expiryAlertService,
+            MealPlanRepository mealPlanRepository) {
         this.foodItemRepository = foodItemRepository;
         this.userRepository = userRepository;
         this.claimRequestRepository = claimRequestRepository;
@@ -63,6 +71,7 @@ public class FoodItemService {
         this.activityLogRepository = activityLogRepository;
         this.activityLogService = activityLogService;
         this.expiryAlertService = expiryAlertService;
+        this.mealPlanRepository = mealPlanRepository;
     }
 
     public List<FoodItemResponse> getAllForUser(Long userId) {
@@ -88,9 +97,26 @@ public class FoodItemService {
                 .toList();
     }
 
+    /**
+     * Items visible in Browse Food Item:
+     *
+     * - Everyone's fully public donations (donated == true, from a donor with
+     * donationPublic == true) — the browsable community pool. - The caller's
+     * OWN donations too, regardless of their donationPublic setting, so they
+     * can always see their own listing. - The caller's OWN items already moved
+     * into their Donation Listing (listedForDonation == true, donated == false)
+     * — not yet public, but this is what powers the "Mark as Used / Plan for
+     * Meal / Flag for Donation" decision panel on the item's own detail view.
+     * Nobody else's not-yet-donated items are ever included here.
+     */
     public List<FoodItemResponse> getAvailableForBrowse(Long userId) {
         List<FoodItem> donatedItems = foodItemRepository.findByDonatedTrueOrderByExpiryDateAsc();
-        if (donatedItems.isEmpty()) {
+        List<FoodItem> ownListedItems = foodItemRepository.findByUserIdOrderByExpiryDateAsc(userId).stream()
+                .filter(item -> Boolean.TRUE.equals(item.getListedForDonation())
+                && !Boolean.TRUE.equals(item.getDonated()))
+                .toList();
+
+        if (donatedItems.isEmpty() && ownListedItems.isEmpty()) {
             return List.of();
         }
 
@@ -102,7 +128,7 @@ public class FoodItemService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(User::getId, u -> u));
 
-        List<FoodItem> visible = donatedItems.stream()
+        List<FoodItem> visibleDonated = donatedItems.stream()
                 .filter(item -> {
                     boolean isOwn = item.getUserId().equals(userId);
                     if (isOwn) {
@@ -112,6 +138,10 @@ public class FoodItemService {
                     return donor != null && Boolean.TRUE.equals(donor.getDonationPublic());
                 })
                 .toList();
+
+        List<FoodItem> visible = new ArrayList<>(visibleDonated.size() + ownListedItems.size());
+        visible.addAll(visibleDonated);
+        visible.addAll(ownListedItems);
 
         Set<Long> visibleIds = visible.stream()
                 .filter(Objects::nonNull)
@@ -128,7 +158,7 @@ public class FoodItemService {
                 .map(item -> {
                     boolean isOwn = item.getUserId().equals(userId);
                     User donor = donorsById.get(item.getUserId());
-                    String donorName = donor != null ? donor.getFullName() : "Anonymous";
+                    String donorName = donor != null ? donor.getFullName() : (isOwn ? "You" : "Anonymous");
                     String donorProfileImageUrl = donor != null ? donor.getProfileImageUrl() : null;
                     Boolean donorPublic = donor != null ? donor.getDonationPublic() : null;
                     boolean alreadyRequested = requestedByMe.contains(item.getId());
@@ -216,11 +246,25 @@ public class FoodItemService {
             throw new ApiException("This item has no expiry date set.", HttpStatus.BAD_REQUEST);
         }
 
+        // An item reserved for a planned meal can't be donated out from under
+        // that plan — the person needs to unlink it (or delete the meal
+        // slot) first.
+        List<MealPlan> reservations = mealPlanRepository.findByLinkedFoodItemIdOrderByMealDateAsc(id);
+        if (!reservations.isEmpty()) {
+            throw new ApiException(
+                    "\"" + item.getName() + "\" is reserved for " + describeReservations(reservations)
+                    + ". Unlink it from your meal plan before donating it.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Eligible window: from today (0 days left — still fine to eat/donate
+        // today) through 7 days before expiry. Only a genuinely past-dated
+        // item (negative days remaining) is turned away here.
         long daysUntilExpiry = ChronoUnit.DAYS.between(LocalDate.now(), item.getExpiryDate());
 
         if (daysUntilExpiry < MIN_DAYS_BEFORE_EXPIRY_FOR_DONATION) {
             throw new ApiException(
-                    "This item has already expired or expires today, so it can no longer be listed for donation.",
+                    "This item has already expired, so it can no longer be listed for donation.",
                     HttpStatus.BAD_REQUEST);
         }
         if (daysUntilExpiry > MAX_DAYS_BEFORE_EXPIRY_FOR_DONATION) {
@@ -372,6 +416,17 @@ public class FoodItemService {
         FoodItem item = foodItemRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ApiException("Food item not found.", HttpStatus.NOT_FOUND));
 
+        // Deleting a reserved item would silently orphan whatever meal plan
+        // slot(s) point at it — make the person unlink it first, same as
+        // donating.
+        List<MealPlan> reservations = mealPlanRepository.findByLinkedFoodItemIdOrderByMealDateAsc(id);
+        if (!reservations.isEmpty()) {
+            throw new ApiException(
+                    "\"" + item.getName() + "\" is reserved for " + describeReservations(reservations)
+                    + ". Unlink it from your meal plan before removing it.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
         boolean isExpired = item.getExpiryDate() != null && item.getExpiryDate().isBefore(LocalDate.now());
         if (isExpired && !Boolean.TRUE.equals(item.getDonated())) {
             activityLogService.record(userId, "WASTED", item.getCategory(), item.getName(), item.getQuantity());
@@ -410,5 +465,29 @@ public class FoodItemService {
             return null;
         }
         return value.trim();
+    }
+
+    /**
+     * Turns a list of meal-plan reservations into a short, human-readable
+     * phrase for an error message, e.g. "Breakfast on 20 Aug 2026" for one
+     * slot, or "Breakfast (20 Aug 2026), Dinner (22 Aug 2026)" for several.
+     */
+    private String describeReservations(List<MealPlan> reservations) {
+        if (reservations.size() == 1) {
+            MealPlan plan = reservations.get(0);
+            return plan.getMealType() + " on " + plan.getMealDate().format(RESERVATION_DATE_FORMAT);
+        }
+
+        String joined = reservations.stream()
+                .limit(3)
+                .map(plan -> plan.getMealType() + " (" + plan.getMealDate().format(RESERVATION_DATE_FORMAT) + ")")
+                .collect(Collectors.joining(", "));
+
+        int remaining = reservations.size() - 3;
+        if (remaining > 0) {
+            joined += ", and " + remaining + " more";
+        }
+
+        return joined;
     }
 }

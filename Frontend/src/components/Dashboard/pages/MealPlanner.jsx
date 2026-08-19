@@ -10,38 +10,32 @@ import {
   Trash2,
   X,
   Utensils,
+  Coffee,
+  Soup,
+  Moon,
+  Cookie,
+  ClipboardCheck,
 } from "lucide-react";
-import { colors, fonts, btnPrimaryStyle } from "../../../theme";
+import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
 import { foodApi, mealPlanApi } from "../../../services/api";
 import SuggestedMeals from "../SuggestedMeals";
 import { logActivity } from "../../../utils/activitylog";
+import { getWeekStart, addDays, dayKey } from "../../../utils/weekDates";
 
 const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
+// Small per-meal-type accent so the grid reads at a glance without reaching
+// for extra colors — everything still sits inside the existing green/brand
+// palette, just varied slightly in tone/opacity per slot.
+const MEAL_TYPE_CONFIG = {
+  Breakfast: { icon: Coffee, tint: "rgba(62, 160, 102, 0.10)" },
+  Lunch: { icon: Soup, tint: "rgba(62, 160, 102, 0.16)" },
+  Dinner: { icon: Moon, tint: "rgba(62, 160, 102, 0.22)" },
+  Snacks: { icon: Cookie, tint: "rgba(62, 160, 102, 0.28)" },
+};
 
 function formatMonthYear(date) {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-function dayKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 const DAY_SHORT = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -81,7 +75,10 @@ export default function MealPlanner({
   const [linkedItemId, setLinkedItemId] = useState("");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [statusMessage, setStatusMessage] = useState("");
+  const [statusTone, setStatusTone] = useState("success");
   const [confirmingPlan, setConfirmingPlan] = useState(false);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [mealsLoading, setMealsLoading] = useState(true);
 
   // Track whether the user has dismissed the pending item banner
   const [dismissedInitialItemId, setDismissedInitialItemId] = useState(null);
@@ -116,11 +113,22 @@ export default function MealPlanner({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setInventoryLoading(true);
       try {
         const data = await foodApi.getAll();
-        if (!cancelled) setInventoryItems(Array.isArray(data) ? data : []);
+        // Only items that are still good to eat belong here — an expired
+        // item can't be planned into a meal. "Expires today" (0 days left)
+        // still counts as available, matching the donation-eligibility rule
+        // elsewhere in the app.
+        const available = (Array.isArray(data) ? data : []).filter((item) => {
+          const daysLeft = daysUntilExpiry(item.expiryDate);
+          return daysLeft === null || daysLeft >= 0;
+        });
+        if (!cancelled) setInventoryItems(available);
       } catch {
         if (!cancelled) setInventoryItems([]);
+      } finally {
+        if (!cancelled) setInventoryLoading(false);
       }
     })();
     return () => {
@@ -132,6 +140,21 @@ export default function MealPlanner({
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart],
   );
+
+  // How many of this week's 28 slots (7 days x 4 meal types) already have a
+  // planned meal — a quick, at-a-glance sense of progress toward "confirm
+  // the week's plan".
+  const weekPlannedCount = useMemo(() => {
+    return weekDays.reduce((total, day) => {
+      return (
+        total +
+        MEAL_TYPES.reduce((count, meal) => {
+          const k = `${dayKey(day)}_${meal}`;
+          return meals[k]?.name ? count + 1 : count;
+        }, 0)
+      );
+    }, 0);
+  }, [weekDays, meals]);
 
   const monthStart = useMemo(() => {
     const d = new Date(weekStart);
@@ -183,11 +206,14 @@ export default function MealPlanner({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setMealsLoading(true);
       try {
         const dict = await loadMealsForRange(rangeStartKey, rangeEndKey);
         if (!cancelled) setMeals(dict);
       } catch {
         if (!cancelled) setMeals({});
+      } finally {
+        if (!cancelled) setMealsLoading(false);
       }
     })();
     return () => {
@@ -307,6 +333,7 @@ export default function MealPlanner({
       logActivity(`Planned meal: ${mealName || "Cleared slot"}`);
       setActiveModal(null);
     } catch (err) {
+      setStatusTone("error");
       setStatusMessage(err.message || "Failed to save meal. Please try again.");
       setTimeout(() => setStatusMessage(""), 4000);
     }
@@ -322,7 +349,9 @@ export default function MealPlanner({
     if (entry?.planId) {
       try {
         await mealPlanApi.delete(entry.planId);
+        logActivity(`Removed planned meal: ${entry.name || "meal slot"}`);
       } catch (err) {
+        setStatusTone("error");
         setStatusMessage(
           err.message || "Failed to remove meal. Please try again.",
         );
@@ -338,10 +367,12 @@ export default function MealPlanner({
       const dict = await loadMealsForRange(rangeStartKey, rangeEndKey);
       setMeals(dict);
       logActivity("Confirmed weekly meal plan & scheduled reminders");
+      setStatusTone("success");
       setStatusMessage(
         "Weekly plan confirmed! Ingredients are reserved and reminders are scheduled for the evening before each meal.",
       );
     } catch (err) {
+      setStatusTone("error");
       setStatusMessage(
         err.message ||
           "Couldn't verify your weekly plan with the server. Please check your connection and try again.",
@@ -358,19 +389,42 @@ export default function MealPlanner({
   return (
     <div>
       <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideInUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes popIn {
+          0% { opacity: 0; transform: scale(0.85); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+
+        .mp-fade-in {
+          animation: fadeIn 0.5s ease-out backwards;
+        }
+        .mp-slide-in {
+          animation: slideInUp 0.55s ease-out backwards;
+        }
+
         .meal-cell-hover {
-          transition: all 0.2s ease;
+          transition: background-color 0.2s ease, box-shadow 0.2s ease;
           position: relative;
         }
         .meal-cell-hover:hover {
           background-color: #F3F9F4 !important;
+          box-shadow: inset 0 0 0 1.5px ${colors.greenLrgb};
         }
         .meal-cell-hover .add-btn-trigger {
           opacity: 0;
-          transition: opacity 0.2s ease;
+          transform: scale(0.9);
+          transition: opacity 0.2s ease, transform 0.2s ease;
         }
         .meal-cell-hover:hover .add-btn-trigger {
           opacity: 1;
+          transform: scale(1);
         }
         .meal-card-item {
           background: #FFFFFF;
@@ -378,61 +432,143 @@ export default function MealPlanner({
           border-radius: 8px;
           padding: 8px 10px;
           box-shadow: 0 2px 5px rgba(0,0,0,0.03);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+          animation: popIn 0.25s ease-out;
         }
         .meal-card-item:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+          border-color: ${colors.green};
+        }
+
+        .nav-arrow-btn {
+          transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+        }
+        .nav-arrow-btn:hover {
+          background-color: ${colors.authGreen} !important;
+          border-color: ${colors.green} !important;
           transform: translateY(-1px);
-          box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+        }
+
+        .view-switch-btn {
+          transition: background 0.2s ease, color 0.2s ease;
+        }
+        .view-switch-btn:hover:not(.view-switch-active) {
+          background: rgba(62, 160, 102, 0.12) !important;
+          color: ${colors.greenD} !important;
+        }
+
+        .confirm-plan-btn {
+          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+        }
+        .confirm-plan-btn:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 24px rgba(62, 160, 102, 0.35);
+        }
+        .confirm-plan-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+
+        .mp-page-btn {
+          transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+        }
+        .mp-page-btn:hover:not(:disabled) {
+          border-color: ${colors.green} !important;
+          background-color: ${colors.authGreen} !important;
+        }
+
+        .mp-inv-card {
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+        .mp-inv-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+          border-color: ${colors.green} !important;
         }
       `}</style>
 
       {/* Header */}
-      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
-        <div>
-          <h1
-            style={{
-              fontFamily: fonts.body,
-              fontSize: "1.60rem",
-              fontWeight: 700,
-              color: colors.charcoal,
-              opacity: 0.75,
-              marginBottom: "0.25rem",
-            }}
-          >
-            Meal Planner
-          </h1>
-          <p className="mb-0" style={{ color: colors.muted }}>
-            Create smarter meal plans based on your food inventory.
-          </p>
+      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3 mp-fade-in">
+        <div className="d-flex align-items-start gap-3">
+          <div>
+            <h1
+              style={{
+                fontFamily: fonts.body,
+                fontSize: "1.60rem",
+                fontWeight: 700,
+                color: colors.charcoal,
+                opacity: 0.75,
+                marginBottom: "0.25rem",
+              }}
+            >
+              Meal Planner
+            </h1>
+            <p className="mb-0" style={{ color: colors.muted }}>
+              Create smarter meal plans based on your food inventory.
+            </p>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className="btn d-inline-flex align-items-center gap-2"
-          onClick={handleConfirmWeeklyPlan}
-          disabled={confirmingPlan}
-          style={{
-            ...btnPrimaryStyle,
-            color: colors.white,
-            fontWeight: 600,
-            padding: "0.55rem 1.25rem",
-            fontSize: "0.9rem",
-            borderRadius: 6,
-          }}
-        >
-          <CheckCircle2 size={20} /> Confirm & Save Plan
-        </button>
+        <div className="d-flex align-items-center gap-3 flex-wrap">
+          <div
+            className="d-flex align-items-center gap-2"
+            style={{
+              background: colors.white,
+              border: `2px solid ${colors.greenLrgb}`,
+              borderRadius: 10,
+              padding: "0.45rem 0.9rem",
+            }}
+          >
+            <ClipboardCheck size={16} color={colors.green} />
+            <span
+              className="small fw-semibold"
+              style={{ color: colors.charcoal, whiteSpace: "nowrap" }}
+            >
+              {weekPlannedCount}/28 slots planned this week
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="btn confirm-plan-btn d-inline-flex align-items-center gap-2"
+            onClick={handleConfirmWeeklyPlan}
+            disabled={confirmingPlan}
+            style={{
+              ...btnPrimaryStyle,
+              color: colors.white,
+              fontWeight: 600,
+              padding: "0.55rem 1.25rem",
+              fontSize: "0.9rem",
+              borderRadius: 6,
+              opacity: confirmingPlan ? 0.75 : 1,
+            }}
+          >
+            <CheckCircle2
+              size={20}
+              style={
+                confirmingPlan
+                  ? { animation: "fadeIn 0.6s ease-in-out infinite alternate" }
+                  : undefined
+              }
+            />
+            {confirmingPlan ? "Confirming…" : "Confirm & Save Plan"}
+          </button>
+        </div>
       </div>
 
       {statusMessage && (
-        <div className="alert alert-success d-flex align-items-center gap-2 py-2 small mb-3">
+        <div
+          className={`alert d-flex align-items-center gap-2 py-2 small mb-3 mp-slide-in ${
+            statusTone === "error" ? "alert-danger" : "alert-success"
+          }`}
+        >
           <Bell size={16} /> {statusMessage}
         </div>
       )}
 
       {pendingPlanItem && (
         <div
-          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3 "
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3 mp-slide-in"
           style={{
             border: `2px solid ${colors.greenLrgb}`,
             background: colors.low_greenFade,
@@ -463,7 +599,7 @@ export default function MealPlanner({
 
       {pendingMealName && (
         <div
-          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3"
+          className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 small mb-3 mp-slide-in"
           style={{
             border: `2px solid ${colors.greenLrgb}`,
             background: colors.low_greenFade,
@@ -489,138 +625,183 @@ export default function MealPlanner({
         </div>
       )}
 
-      <SuggestedMeals onUseRecipe={(name) => setPendingMealName(name)} />
+      <div className="mp-slide-in" style={{ animationDelay: "0.05s" }}>
+        <SuggestedMeals onUseRecipe={(name) => setPendingMealName(name)} />
+      </div>
 
       {/* Inventory Panel */}
-      {inventoryItems.length > 0 && (
+      {inventoryLoading ? (
         <div
-          className="rounded-4 p-3 mb-4"
+          className="rounded-4 p-4 mb-4 text-center small mp-slide-in"
           style={{
             background: colors.authGreen,
             border: `2px solid ${colors.greenLrgb}`,
+            color: colors.muted,
+            animationDelay: "0.1s",
           }}
         >
+          Loading your inventory…
+        </div>
+      ) : (
+        inventoryItems.length > 0 && (
           <div
-            className="d-flex align-items-baseline justify-content-between flex-wrap gap-2"
-            style={{ marginBottom: 10 }}
+            className="rounded-4 p-3 mb-4 mp-slide-in"
+            style={{
+              background: colors.authGreen,
+              border: `2px solid ${colors.greenLrgb}`,
+              animationDelay: "0.1s",
+            }}
           >
-            <div style={{ fontWeight: 700, color: colors.charcoal }}>
-              Available from your inventory
+            <div
+              className="d-flex align-items-baseline justify-content-between flex-wrap gap-2"
+              style={{ marginBottom: 10 }}
+            >
+              <div style={{ fontWeight: 700, color: colors.charcoal }}>
+                Available from your inventory
+              </div>
+              <span className="small" style={{ color: colors.muted }}>
+                Sorted by nearest expiry &middot; {sortedInventory.length} item
+                {sortedInventory.length === 1 ? "" : "s"}
+              </span>
             </div>
-            <span className="small" style={{ color: colors.muted }}>
-              Sorted by nearest expiry &middot; {sortedInventory.length} item
-              {sortedInventory.length === 1 ? "" : "s"}
-            </span>
-          </div>
 
-          <div className="row g-3">
-            {paginatedInventory.map((item) => {
-              const daysLeft = daysUntilExpiry(item.expiryDate);
-              const isUrgent = daysLeft !== null && daysLeft <= 3;
-              return (
-                <div className="col-12 col-sm-6 col-lg-4" key={item.id}>
-                  <div
-                    className="d-flex gap-3 p-2 rounded-3 h-100"
-                    style={{
-                      background: colors.white,
-                      border: `1px solid ${colors.greenLrgb}`,
-                    }}
-                  >
-                    <img
-                      src={item.imageUrl || DEFAULT_ITEM_IMAGE}
-                      alt={item.name}
-                      className="rounded-3 flex-shrink-0"
-                      style={{ width: 50, height: 50, objectFit: "cover" }}
-                    />
-                    <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                      <div
-                        className="fw-bold text-truncate"
-                        style={{ color: colors.greenD, fontSize: "0.85rem" }}
-                        title={item.name}
-                      >
-                        {item.name}
-                      </div>
-                      <div className="small" style={{ color: colors.charcoal }}>
-                        {item.quantity} {item.quantityUnit}
-                      </div>
-                      <div
-                        className="small"
-                        style={{
-                          color: isUrgent ? "#b3261e" : colors.muted,
-                          fontWeight: isUrgent ? 700 : 400,
-                          fontSize: "0.75rem",
-                        }}
-                      >
-                        Expires {formatExpiry(item.expiryDate)}
+            <div className="row g-3">
+              {paginatedInventory.map((item) => {
+                const daysLeft = daysUntilExpiry(item.expiryDate);
+                const isUrgent = daysLeft !== null && daysLeft <= 3;
+                return (
+                  <div className="col-12 col-sm-6 col-lg-4" key={item.id}>
+                    <div
+                      className="d-flex gap-3 p-2 rounded-3 h-100 mp-inv-card"
+                      style={{
+                        background: colors.white,
+                        border: `1px solid ${colors.greenLrgb}`,
+                      }}
+                    >
+                      <img
+                        src={item.imageUrl || DEFAULT_ITEM_IMAGE}
+                        alt={item.name}
+                        className="rounded-3 flex-shrink-0"
+                        style={{ width: 50, height: 50, objectFit: "cover" }}
+                      />
+                      <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                        <div className="d-flex align-items-start justify-content-between gap-1">
+                          <div
+                            className="fw-bold text-truncate"
+                            style={{
+                              color: colors.greenD,
+                              fontSize: "0.85rem",
+                            }}
+                            title={item.name}
+                          >
+                            {item.name}
+                          </div>
+                          {item.reserved && (
+                            <span
+                              className="flex-shrink-0"
+                              title="Linked to a planned meal"
+                              style={{
+                                fontSize: "0.62rem",
+                                fontWeight: 700,
+                                color: colors.greenD,
+                                backgroundColor: colors.authGreen,
+                                padding: "1px 5px",
+                                borderRadius: 4,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              Reserved
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="small"
+                          style={{ color: colors.charcoal }}
+                        >
+                          {item.quantity} {item.quantityUnit}
+                        </div>
+                        <div
+                          className="small"
+                          style={{
+                            color: isUrgent ? "#b3261e" : colors.muted,
+                            fontWeight: isUrgent ? 700 : 400,
+                            fontSize: "0.75rem",
+                          }}
+                        >
+                          Expires {formatExpiry(item.expiryDate)}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {inventoryTotalPages > 1 && (
-            <div className="d-flex align-items-center justify-content-center gap-2 mt-3">
-              <button
-                type="button"
-                className="btn btn-sm d-flex align-items-center justify-content-center"
-                onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
-                disabled={currentInventoryPage === 1}
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  border: `2px solid ${colors.greenLrgb}`,
-                  background: "white",
-                  padding: 0,
-                  opacity: currentInventoryPage === 1 ? 0.5 : 1,
-                }}
-              >
-                <ChevronLeft size={14} color={colors.charcoal} />
-              </button>
-              <span
-                className="small"
-                style={{
-                  color: colors.muted,
-                  minWidth: 70,
-                  textAlign: "center",
-                }}
-              >
-                Page {currentInventoryPage} of {inventoryTotalPages}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm d-flex align-items-center justify-content-center"
-                onClick={() =>
-                  setInventoryPage((p) => Math.min(inventoryTotalPages, p + 1))
-                }
-                disabled={currentInventoryPage === inventoryTotalPages}
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  border: `2px solid ${colors.greenLrgb}`,
-                  background: "white",
-                  padding: 0,
-                  opacity:
-                    currentInventoryPage === inventoryTotalPages ? 0.5 : 1,
-                }}
-              >
-                <ChevronRight size={14} color={colors.charcoal} />
-              </button>
+                );
+              })}
             </div>
-          )}
-        </div>
+
+            {inventoryTotalPages > 1 && (
+              <div className="d-flex align-items-center justify-content-center gap-2 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-sm mp-page-btn d-flex align-items-center justify-content-center"
+                  onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
+                  disabled={currentInventoryPage === 1}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: `2px solid ${colors.greenLrgb}`,
+                    background: "white",
+                    padding: 0,
+                    opacity: currentInventoryPage === 1 ? 0.5 : 1,
+                  }}
+                >
+                  <ChevronLeft size={14} color={colors.charcoal} />
+                </button>
+                <span
+                  className="small"
+                  style={{
+                    color: colors.muted,
+                    minWidth: 70,
+                    textAlign: "center",
+                  }}
+                >
+                  Page {currentInventoryPage} of {inventoryTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm mp-page-btn d-flex align-items-center justify-content-center"
+                  onClick={() =>
+                    setInventoryPage((p) =>
+                      Math.min(inventoryTotalPages, p + 1),
+                    )
+                  }
+                  disabled={currentInventoryPage === inventoryTotalPages}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: `2px solid ${colors.greenLrgb}`,
+                    background: "white",
+                    padding: 0,
+                    opacity:
+                      currentInventoryPage === inventoryTotalPages ? 0.5 : 1,
+                  }}
+                >
+                  <ChevronRight size={14} color={colors.charcoal} />
+                </button>
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {/* Navigation & View Switcher */}
-      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 mp-fade-in">
         <div className="d-flex align-items-center gap-2">
           <button
             type="button"
-            className="btn btn-sm d-flex align-items-center justify-content-center"
+            className="btn btn-sm nav-arrow-btn d-flex align-items-center justify-content-center"
             onClick={navPrev}
+            aria-label="Previous"
             style={{
               width: 32,
               height: 32,
@@ -647,8 +828,9 @@ export default function MealPlanner({
 
           <button
             type="button"
-            className="btn btn-sm d-flex align-items-center justify-content-center"
+            className="btn btn-sm nav-arrow-btn d-flex align-items-center justify-content-center"
             onClick={navNext}
+            aria-label="Next"
             style={{
               width: 32,
               height: 32,
@@ -675,6 +857,7 @@ export default function MealPlanner({
             <button
               key={mode}
               type="button"
+              className={`view-switch-btn${viewMode === mode ? " view-switch-active" : ""}`}
               onClick={() => setViewMode(mode)}
               style={{
                 padding: "0.4rem 1.1rem",
@@ -686,7 +869,6 @@ export default function MealPlanner({
                 color: viewMode === mode ? "white" : colors.muted,
                 cursor: "pointer",
                 textTransform: "capitalize",
-                transition: "background 0.15s ease",
               }}
             >
               {mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -697,10 +879,21 @@ export default function MealPlanner({
 
       {/* Calendar Card View */}
       <div
-        className="bg-white rounded-4 overflow-hidden shadow-sm"
-        style={{ border: `2px solid ${colors.greenLrgb}` }}
+        className="bg-white rounded-4 overflow-hidden mp-slide-in"
+        style={{
+          border: `2px solid ${colors.greenLrgb}`,
+          boxShadow: shadows.sm,
+          animationDelay: "0.15s",
+        }}
       >
-        {viewMode === "week" ? (
+        {mealsLoading ? (
+          <div
+            className="text-center py-5 small"
+            style={{ color: colors.muted }}
+          >
+            Loading your meal plan…
+          </div>
+        ) : viewMode === "week" ? (
           <div style={{ overflowX: "auto" }}>
             <table
               style={{
@@ -728,6 +921,10 @@ export default function MealPlanner({
                           borderRight: i < 6 ? cellBorder : "none",
                           padding: "12px 8px",
                           textAlign: "center",
+                          background: isToday
+                            ? "rgba(62, 160, 102, 0.14)"
+                            : "transparent",
+                          transition: "background-color 0.2s ease",
                         }}
                       >
                         <div
@@ -764,126 +961,138 @@ export default function MealPlanner({
                 </tr>
               </thead>
               <tbody>
-                {MEAL_TYPES.map((meal, mi) => (
-                  <tr key={meal}>
-                    <td
-                      style={{
-                        borderBottom:
-                          mi < MEAL_TYPES.length - 1 ? cellBorder : "none",
-                        borderRight: cellBorder,
-                        padding: "0 14px",
-                        verticalAlign: "middle",
-                        width: 100,
-                        background: colors.showcase_green,
-                      }}
-                    >
-                      <span
+                {MEAL_TYPES.map((meal, mi) => {
+                  const MealIcon = MEAL_TYPE_CONFIG[meal]?.icon;
+                  return (
+                    <tr key={meal}>
+                      <td
                         style={{
-                          fontSize: "0.82rem",
-                          fontWeight: 700,
-                          color: colors.charcoal,
-                          opacity: 0.75,
+                          borderBottom:
+                            mi < MEAL_TYPES.length - 1 ? cellBorder : "none",
+                          borderRight: cellBorder,
+                          padding: "0 14px",
+                          verticalAlign: "middle",
+                          width: 100,
+                          background: colors.showcase_green,
                         }}
                       >
-                        {meal}
-                      </span>
-                    </td>
-                    {weekDays.map((d, di) => {
-                      const k = `${dayKey(d)}_${meal}`;
-                      const mealData = getMealData(d, meal);
-
-                      return (
-                        <td
-                          key={di}
-                          className="meal-cell-hover"
+                        <span
+                          className="d-inline-flex align-items-center gap-1"
                           style={{
-                            borderBottom:
-                              mi < MEAL_TYPES.length - 1 ? cellBorder : "none",
-                            borderRight: di < 6 ? cellBorder : "none",
-                            padding: "8px",
-                            verticalAlign: "top",
-                            minHeight: 105,
-                            height: 105,
-                            cursor: "pointer",
-                            background: colors.white,
+                            fontSize: "0.82rem",
+                            fontWeight: 700,
+                            color: colors.charcoal,
+                            opacity: 0.75,
                           }}
-                          onClick={() => openEditModal(d, meal)}
                         >
-                          {mealData.name ? (
-                            <div className="meal-card-item">
-                              <div className="d-flex align-items-center justify-content-between gap-1 mb-1">
-                                <span
-                                  style={{
-                                    fontSize: "0.82rem",
-                                    fontWeight: 700,
-                                    color: colors.charcoal,
-                                    lineHeight: 1.2,
-                                  }}
-                                >
-                                  {mealData.name}
-                                </span>
-                                <div className="d-flex align-items-center gap-1">
-                                  <button
-                                    type="button"
-                                    className="btn btn-link p-0 text-muted"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openEditModal(d, meal);
-                                    }}
-                                  >
-                                    <Pencil size={11} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-link p-0 text-danger"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteMealSlot(k);
-                                    }}
-                                  >
-                                    <Trash2 size={11} />
-                                  </button>
-                                </div>
-                              </div>
+                          {MealIcon && (
+                            <MealIcon size={13} color={colors.green} />
+                          )}
+                          {meal}
+                        </span>
+                      </td>
+                      {weekDays.map((d, di) => {
+                        const k = `${dayKey(d)}_${meal}`;
+                        const mealData = getMealData(d, meal);
+                        const isTodayCol = dayKey(d) === today;
 
-                              {mealData.linkedItem && (
-                                <div
-                                  className="d-inline-flex align-items-center gap-1"
+                        return (
+                          <td
+                            key={di}
+                            className="meal-cell-hover"
+                            style={{
+                              borderBottom:
+                                mi < MEAL_TYPES.length - 1
+                                  ? cellBorder
+                                  : "none",
+                              borderRight: di < 6 ? cellBorder : "none",
+                              padding: "8px",
+                              verticalAlign: "top",
+                              minHeight: 105,
+                              height: 105,
+                              cursor: "pointer",
+                              background: isTodayCol
+                                ? "rgba(62, 160, 102, 0.05)"
+                                : colors.white,
+                            }}
+                            onClick={() => openEditModal(d, meal)}
+                          >
+                            {mealData.name ? (
+                              <div className="meal-card-item">
+                                <div className="d-flex align-items-center justify-content-between gap-1 mb-1">
+                                  <span
+                                    style={{
+                                      fontSize: "0.82rem",
+                                      fontWeight: 700,
+                                      color: colors.charcoal,
+                                      lineHeight: 1.2,
+                                    }}
+                                  >
+                                    {mealData.name}
+                                  </span>
+                                  <div className="d-flex align-items-center gap-1">
+                                    <button
+                                      type="button"
+                                      className="btn btn-link p-0 text-muted"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openEditModal(d, meal);
+                                      }}
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-link p-0 text-danger"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteMealSlot(k);
+                                      }}
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {mealData.linkedItem && (
+                                  <div
+                                    className="d-inline-flex align-items-center gap-1"
+                                    style={{
+                                      fontSize: "0.68rem",
+                                      color: colors.greenD,
+                                      backgroundColor: colors.authGreen,
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    <Package size={10} /> {mealData.linkedItem}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div
+                                className="w-100 h-100 d-flex align-items-center justify-content-center rounded-2"
+                                style={{ border: "1px dashed #E5E7EB" }}
+                              >
+                                <span
+                                  className="add-btn-trigger d-inline-flex align-items-center gap-1"
                                   style={{
-                                    fontSize: "0.68rem",
-                                    color: colors.greenD,
-                                    backgroundColor: colors.authGreen,
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
+                                    fontSize: "0.75rem",
+                                    color: colors.green,
                                     fontWeight: 600,
                                   }}
                                 >
-                                  <Package size={10} /> {mealData.linkedItem}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              className="w-100 h-100 d-flex align-items-center justify-content-center rounded-2"
-                              style={{ border: "1px dashed #E5E7EB" }}
-                            >
-                              <span
-                                className="add-btn-trigger d-inline-flex align-items-center gap-1"
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: colors.green,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                <Plus size={13} /> Add
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                                  <Plus size={13} /> Add
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1034,6 +1243,7 @@ export default function MealPlanner({
             background: "rgba(0,0,0,0.4)",
             zIndex: 10000,
             padding: 16,
+            animation: "fadeIn 0.2s ease-out",
           }}
         >
           <div
@@ -1047,12 +1257,23 @@ export default function MealPlanner({
               maxWidth: 440,
               width: "100%",
               padding: "24px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              boxShadow: shadows.lg,
+              animation: "popIn 0.2s ease-out",
             }}
           >
             <div className="d-flex align-items-center justify-content-between mb-3">
               <div className="d-flex align-items-center gap-2">
-                <Utensils size={18} color={colors.green} />
+                <div
+                  className="d-flex align-items-center justify-content-center flex-shrink-0"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 9,
+                    background: colors.authGreen,
+                  }}
+                >
+                  <Utensils size={16} color={colors.green} />
+                </div>
                 <h5 className="m-0 fw-bold" style={{ color: colors.charcoal }}>
                   Plan {activeModal.meal}
                 </h5>
@@ -1061,6 +1282,7 @@ export default function MealPlanner({
                 type="button"
                 className="btn btn-link text-muted p-0"
                 onClick={() => setActiveModal(null)}
+                aria-label="Close"
               >
                 <X size={20} />
               </button>
@@ -1114,15 +1336,18 @@ export default function MealPlanner({
             <div className="d-flex align-items-center justify-content-end gap-2">
               <button
                 type="button"
-                className="btn btn-light fw-semibold"
+                className="btn btn-light fw-semibold mp-page-btn"
                 onClick={() => setActiveModal(null)}
-                style={{ borderRadius: 8 }}
+                style={{
+                  borderRadius: 8,
+                  border: `2px solid ${colors.greenLrgb}`,
+                }}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="btn text-white fw-bold px-4"
+                className="btn text-white fw-bold px-4 confirm-plan-btn"
                 onClick={saveMealModal}
                 style={{
                   background: colors.green,

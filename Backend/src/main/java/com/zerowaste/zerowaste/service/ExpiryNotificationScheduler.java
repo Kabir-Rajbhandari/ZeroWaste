@@ -18,6 +18,8 @@ import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.FoodItemRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class ExpiryNotificationScheduler {
 
@@ -37,49 +39,23 @@ public class ExpiryNotificationScheduler {
         this.expiryAlertService = expiryAlertService;
     }
 
-    /**
-     * Runs every day at 6:00 AM UTC.
-     *
-     * Notification rules (delegated to {@link ExpiryAlertService}):
-     *
-     * 4+ days remaining -> no notification 3 days remaining -> notification 2
-     * days remaining -> notification 1 day remaining -> notification 0 days
-     * remaining -> notification expired -> no new notification
-     *
-     * This is a nightly sweep of every item already sitting in someone's
-     * inventory. Items that are 0-3 days from expiring the moment they're
-     * *added* get their first alert immediately instead — see
-     * {@link FoodItemService#create}, which calls the same
-     * {@link ExpiryAlertService#generateIfDue} — so nobody has to wait until
-     * the next morning's run just because they added an
-     * already-close-to-expiring item today.
-     */
+    @PostConstruct
+    public void runOnStartup() {
+        generateDailyExpiryNotifications();
+    }
+
     @Scheduled(
-            cron = "${app.expiry-alerts.cron:0 0 6 * * *}",
+            cron = "${app.expiry-alerts.cron:0 1 0 * * *}",
             zone = "UTC"
     )
     @Transactional
     public void generateDailyExpiryNotifications() {
 
-        /*
-         * Use UTC because the notification scheduler is defined
-         * as a universal 6:00 AM scheduler.
-         */
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
 
         LocalDate notificationCutoff
                 = today.plusDays(NOTIFICATION_DAYS_BEFORE_EXPIRY);
 
-        /*
-         * Get active food items expiring between today and
-         * three days from today.
-         *
-         * This automatically excludes:
-         *
-         * - food expiring in 4+ days
-         * - already expired food
-         * - donated food
-         */
         List<FoodItem> expiringItems
                 = foodItemRepository.findByDonatedFalseAndExpiryDateBetween(
                         today,

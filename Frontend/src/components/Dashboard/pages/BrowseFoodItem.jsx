@@ -9,6 +9,7 @@ import {
   Clock,
   RotateCcw,
   Filter,
+  Flag,
 } from "lucide-react";
 import { colors, fonts, btnPrimaryStyle } from "../../../theme";
 import { foodApi, resolveAssetUrl } from "../../../services/api";
@@ -216,16 +217,15 @@ export default function BrowseFoodItem({ onNavigate }) {
         category === "All Categories" ||
         item.category?.toLowerCase() === category.toLowerCase();
 
-      // 3. Inventory vs Donation Toggle
+      // 3. Inventory vs Donation Toggle — "Inventory" means the caller's own
+      // not-yet-donated items (still deciding what to do with them);
+      // "Donations" means anything already public (donated === true, either
+      // the caller's own or someone else's).
       let matchesType = true;
-      const isDonation =
-        item.isDonation === true ||
-        item.isDonated === true ||
-        item.type === "donation" ||
-        (item.isOwn === false && Boolean(item.donorName));
+      const isDonation = item.donated === true;
 
       if (typeFilter === "inventory") {
-        matchesType = !isDonation || item.isOwn === true;
+        matchesType = !isDonation;
       } else if (typeFilter === "donations") {
         matchesType = isDonation;
       }
@@ -642,13 +642,11 @@ export default function BrowseFoodItem({ onNavigate }) {
                 </div>
               )}
 
-              {selectedItem.isOwn ? (
+              {selectedItem.isOwn && !selectedItem.donated ? (
                 <div className="mt-4">
                   <p className="small mb-3" style={{ color: colors.muted }}>
-                    This is your own listing —{" "}
-                    {selectedItem.donorPublic === false
-                      ? "it's currently private."
-                      : "it's public for community browsing."}
+                    This is your own listing — decide what to do with it: mark
+                    it used, plan a meal around it, or flag it for donation.
                   </p>
 
                   {confirmingUsed ? (
@@ -723,7 +721,7 @@ export default function BrowseFoodItem({ onNavigate }) {
                       </button>
                       <button
                         type="button"
-                        className="btn px-4"
+                        className="btn px-4 d-inline-flex align-items-center gap-2"
                         style={{
                           ...btnPrimaryStyle,
                           borderRadius: 6,
@@ -734,10 +732,39 @@ export default function BrowseFoodItem({ onNavigate }) {
                         }}
                         onClick={() => setDonateTarget(selectedItem)}
                       >
+                        <Flag size={15} />
                         Flag for Donation
                       </button>
                     </div>
                   )}
+                </div>
+              ) : selectedItem.isOwn && selectedItem.donated ? (
+                <div className="mt-4">
+                  <div
+                    className="d-flex align-items-start gap-2 rounded-3 p-3"
+                    style={{
+                      background: colors.low_greenFade,
+                      border: `1.5px solid ${colors.greenLrgb}`,
+                    }}
+                  >
+                    <Flag
+                      size={18}
+                      style={{ color: colors.green, marginTop: 2 }}
+                    />
+                    <div>
+                      <div
+                        className="fw-semibold small"
+                        style={{ color: colors.charcoal }}
+                      >
+                        This item is public and out for donation
+                      </div>
+                      <p className="small mb-0" style={{ color: colors.muted }}>
+                        It's visible to the community now. If someone requests
+                        it, you'll get a notification to accept or decline —
+                        you'll find it in Notifications.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="d-flex justify-content-end gap-3 mt-4">

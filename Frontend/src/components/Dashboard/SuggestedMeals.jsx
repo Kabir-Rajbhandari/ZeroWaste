@@ -123,12 +123,20 @@ export default function SuggestedMeals({ onUseRecipe }) {
 
       try {
         const items = await foodApi.getAll();
+        // Only suggest recipes based on ingredients that are still good to
+        // use — an expired item shouldn't drive a recipe suggestion. Items
+        // expiring today still count (they're the most useful to suggest a
+        // recipe for, before they're gone tomorrow).
+        const usable = (Array.isArray(items) ? items : []).filter((it) => {
+          if (!it.expiryDate) return true;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const expiry = new Date(it.expiryDate);
+          expiry.setHours(0, 0, 0, 0);
+          return expiry >= today;
+        });
         const names = Array.from(
-          new Set(
-            (Array.isArray(items) ? items : [])
-              .map((it) => (it.name || "").trim())
-              .filter(Boolean),
-          ),
+          new Set(usable.map((it) => (it.name || "").trim()).filter(Boolean)),
         ).slice(0, MAX_INGREDIENTS_TO_QUERY);
 
         let merged = [];

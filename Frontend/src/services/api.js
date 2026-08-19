@@ -302,10 +302,13 @@ export const mealPlanApi = {
     const params = new URLSearchParams({ startDate, endDate });
     return request(`/api/meal-plans?${params.toString()}`, { method: "GET" });
   },
-  upsert({ mealDate, mealType, name, linkedFoodItemId }) {
+  // `id` is optional: omit it (or pass null/undefined) to add a new meal
+  // entry to the mealDate+mealType slot; pass an existing entry's id to
+  // edit/clear that specific entry. A slot can hold more than one entry.
+  upsert({ id, mealDate, mealType, name, linkedFoodItemId }) {
     return request("/api/meal-plans", {
       method: "PUT",
-      body: JSON.stringify({ mealDate, mealType, name, linkedFoodItemId }),
+      body: JSON.stringify({ id, mealDate, mealType, name, linkedFoodItemId }),
     });
   },
   delete(id) {

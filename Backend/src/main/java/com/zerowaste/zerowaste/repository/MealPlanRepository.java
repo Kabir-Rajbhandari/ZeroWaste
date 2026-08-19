@@ -18,5 +18,7 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
 
     long countByLinkedFoodItemId(Long linkedFoodItemId);
 
+    List<MealPlan> findByLinkedFoodItemIdOrderByMealDateAsc(Long linkedFoodItemId);
+
     List<MealPlan> findByMealDateAndReminderSentFalse(LocalDate mealDate);
 }

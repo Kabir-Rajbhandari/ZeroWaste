@@ -12,9 +12,10 @@ import {
   ChartBar,
 } from "lucide-react";
 import { colors, fonts, shadows, btnPrimaryStyle } from "../../../theme";
-import { analyticsApi, foodApi } from "../../../services/api";
+import { analyticsApi, foodApi, mealPlanApi } from "../../../services/api";
 import { onActivityLogged } from "../../../utils/activitylog";
 import { useCountUp } from "../../../utils/useCountUp";
+import { getWeekStart, addDays, dayKey } from "../../../utils/weekDates";
 import {
   formatActivityTime,
   getActivityConfig,
@@ -34,6 +35,29 @@ function daysUntil(dateStr) {
   const expiry = new Date(dateStr);
   expiry.setHours(0, 0, 0, 0);
   return Math.round((expiry - today) / 86400000);
+}
+
+// Fetches this Monday-Sunday week's meal-plan rows — the same week/range
+// definition the Meal Planner's own "week" view uses, so the two numbers
+// never disagree. Fails soft (empty array) so a meal-plan hiccup doesn't
+// take down the rest of the dashboard via Promise.all.
+async function loadThisWeeksMeals() {
+  try {
+    const weekStart = getWeekStart(new Date());
+    const weekEnd = addDays(weekStart, 6);
+    const data = await mealPlanApi.getRange(dayKey(weekStart), dayKey(weekEnd));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+// The backend only ever returns rows that represent an actual saved slot
+// (a blank name with no linked item gets deleted server-side on save), but
+// count defensively by name anyway rather than trusting array length alone.
+function countPlannedMeals(weekMeals) {
+  if (!Array.isArray(weekMeals)) return null;
+  return weekMeals.filter((plan) => plan?.name && plan.name.trim()).length;
 }
 
 function formatDate(dateStr) {
@@ -173,19 +197,17 @@ export default function DashboardHome({ onNavigate }) {
     setLoading(true);
     setErrMsg("");
     try {
-      const [inventory, meals, saved, recent, summary, communityImpact] =
+      const [inventory, weekMeals, saved, recent, summary, communityImpact] =
         await Promise.all([
           foodApi.getAll(),
-          foodApi.getMealsPlanned?.(),
+          loadThisWeeksMeals(),
           foodApi.getFoodSaved?.(),
           foodApi.getRecentActivity?.(),
           analyticsApi.getSummary("month"),
           analyticsApi.getCommunityImpact(),
         ]);
       setItems(Array.isArray(inventory) ? inventory : []);
-      setMealsPlanned(
-        typeof meals === "number" ? meals : (meals?.count ?? null),
-      );
+      setMealsPlanned(countPlannedMeals(weekMeals));
       setFoodSaved(
         typeof summary?.foodSavedCount === "number"
           ? summary.foodSavedCount
@@ -228,6 +250,13 @@ export default function DashboardHome({ onNavigate }) {
       } catch {
         setActivity(mergeActivity([]));
       }
+
+      // Keep the "Meals Planned" stat live too — planning, editing, or
+      // removing a meal in the Meal Planner fires this same event, so the
+      // count on Dashboard reflects it immediately rather than only on the
+      // next full page visit.
+      const weekMeals = await loadThisWeeksMeals();
+      setMealsPlanned(countPlannedMeals(weekMeals));
     });
   }, []);
 

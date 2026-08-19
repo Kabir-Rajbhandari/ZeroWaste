@@ -146,7 +146,7 @@ function InlineConfirmDialog({
   );
 }
 
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 9;
 
 function formatDate(dateStr) {
   if (!dateStr) return "—";
@@ -155,6 +155,15 @@ function formatDate(dateStr) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+// The backend phrases reservation-conflict errors as "... is reserved for
+// ...", so this is used to route them to the same popup treatment as the
+// donation-eligibility check, rather than the plain top error banner.
+function isReservationError(err) {
+  return (
+    typeof err?.message === "string" && err.message.includes("is reserved for")
+  );
 }
 
 export default function FoodInventory({ onNavigate }) {
@@ -200,6 +209,14 @@ export default function FoodInventory({ onNavigate }) {
   }, [loadItems]);
 
   const handleDelete = async (id) => {
+    const target = items.find((item) => item.id === id);
+    if (target?.reserved) {
+      setInfoDialog({
+        title: "This item is reserved",
+        message: `"${target.name}" is currently reserved for a planned meal. Unlink it from your Meal Planner before removing it.`,
+      });
+      return;
+    }
     setConfirmPayload({ type: "delete", id });
     setConfirmOpen(true);
   };
@@ -211,6 +228,16 @@ export default function FoodInventory({ onNavigate }) {
       setItems((prev) => prev.filter((item) => item.id !== id));
       logActivity(`Removed ${target?.name || "an item"}`);
     } catch (err) {
+      // A reserved item can't be deleted — show it as a popup (same
+      // treatment as the donation-eligibility message below) instead of
+      // just the top banner, since it needs the person's attention.
+      if (isReservationError(err)) {
+        setInfoDialog({
+          title: "This item is reserved",
+          message: err.message,
+        });
+        return;
+      }
       setErrMsg(err.message || "Failed to delete item.");
     }
   };
@@ -242,18 +269,28 @@ export default function FoodInventory({ onNavigate }) {
   };
 
   // UC step: "User selects item nearing expiry and clicks 'Convert to
-  // Donation.'" Only eligible between 1 and 7 days before expiry — anything
-  // else pops an interactive message instead of hitting the API.
+  // Donation.'" Eligible from today's date (0 days left, i.e. expires today
+  // — still fine to eat/donate today) through 7 days before expiry. Anything
+  // else (already past its expiry date, or too far out) pops an interactive
+  // message instead of hitting the API.
   const handleConvertToDonation = (item) => {
+    if (item.reserved) {
+      setInfoDialog({
+        title: "This item is reserved",
+        message: `"${item.name}" is currently reserved for a planned meal. Unlink it from your Meal Planner before donating it.`,
+      });
+      return;
+    }
+
     const daysLeft = getDaysUntilExpiry(item.expiryDate);
-    const eligible = daysLeft !== null && daysLeft >= 1 && daysLeft <= 7;
+    const eligible = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
     if (!eligible) {
       setInfoDialog({
         title: "Not eligible for donation yet",
         message:
-          daysLeft !== null && daysLeft < 1
-            ? `"${item.name}" has already expired or expires today, so it can no longer be listed for donation.`
+          daysLeft !== null && daysLeft < 0
+            ? `"${item.name}" has already expired, so it can no longer be listed for donation.`
             : `"${item.name}" isn't close enough to its expiry date yet. Items can only be listed for donation once they're within 7 days of expiring.`,
       });
       return;
@@ -275,6 +312,13 @@ export default function FoodInventory({ onNavigate }) {
       logActivity(`Listed ${target?.name || "an item"} for donation`);
       onNavigate?.("donation-listing");
     } catch (err) {
+      if (isReservationError(err)) {
+        setInfoDialog({
+          title: "This item is reserved",
+          message: err.message,
+        });
+        return;
+      }
       setErrMsg(err.message || "Failed to list item for donation.");
     }
   };
