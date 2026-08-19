@@ -1,0 +1,42 @@
+     column_name     | is_nullable |        data_type         
+---------------------+-------------+--------------------------
+ id                  | NO          | bigint
+ category            | YES         | character varying
+ item_name           | YES         | character varying
+ occurred_at         | NO          | timestamp with time zone
+ quantity            | YES         | double precision
+ type                | NO          | character varying
+ user_id             | NO          | bigint
+ id                  | NO          | bigint
+ available_time      | YES         | character varying
+ category            | NO          | character varying
+ contact_detail      | YES         | character varying
+ donated             | YES         | boolean
+ expiry_alert_sent   | YES         | boolean
+ expiry_date         | NO          | date
+ image_url           | YES         | text
+ name                | NO          | character varying
+ notes               | YES         | text
+ pickup_location     | YES         | character varying
+ quantity            | NO          | double precision
+ quantity_unit       | NO          | character varying
+ reserved            | YES         | boolean
+ storage_location    | YES         | character varying
+ user_id             | NO          | bigint
+ listed_for_donation | YES         | boolean
+ id                  | NO          | bigint
+ category            | NO          | character varying
+ claim_request_id    | YES         | bigint
+ created_at          | NO          | timestamp with time zone
+ expiry_alert_date   | YES         | date
+ food_item_id        | YES         | bigint
+ item_name           | YES         | character varying
+ message             | NO          | character varying
+ read                | NO          | boolean
+ requester_name      | YES         | character varying
+ resolved            | NO          | boolean
+ title               | NO          | character varying
+ type                | NO          | character varying
+ user_id             | NO          | bigint
+(38 rows)
+

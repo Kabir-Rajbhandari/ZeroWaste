@@ -1,5 +1,7 @@
 package com.zerowaste.zerowaste.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.zerowaste.zerowaste.model.FoodActivityLog;
@@ -9,6 +11,8 @@ import com.zerowaste.zerowaste.repository.NotificationRepository;
 
 @Service
 public class ActivityLogService {
+
+    private static final Logger log = LoggerFactory.getLogger(ActivityLogService.class);
 
     private final FoodActivityLogRepository activityLogRepository;
     private final NotificationRepository notificationRepository;
@@ -28,7 +32,11 @@ public class ActivityLogService {
                 .quantity(quantity)
                 .build());
 
-        notifyOwnActivity(userId, type, itemName);
+        try {
+            notifyOwnActivity(userId, type, itemName);
+        } catch (RuntimeException ex) {
+            log.warn("Could not create activity notification for user {} and type {}", userId, type, ex);
+        }
     }
 
     private void notifyOwnActivity(Long userId, String type, String itemName) {
