@@ -18,7 +18,13 @@ dotenv.config({ path: path.resolve(__dirname, "Automation_testing", ".env") });
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: "./Automation_testing",
+  /*
+   * Only the curated Page-Object-driven specs under e2e/ are executed.
+   * The original codegen recordings now live in
+   * Automation_testing/legacy_recordings/ purely for reference and are
+   * intentionally outside this testDir so they never run.
+   */
+  testDir: "./Automation_testing/e2e",
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

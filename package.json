@@ -1,15 +1,18 @@
 {
   "name": "zerowaste",
   "version": "1.0.0",
-  "description": "Malaysians love food and alongside this, it create a problem of food waste.\r This is where ZeroWaste comes, it's an intelligent inventory management and planning web application.",
+  "description": "Malaysians love food and alongside this, it create a problem of food waste. This is where ZeroWaste comes, it's an intelligent inventory management and planning web application.",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "playwright test",
+    "test:iteration1": "playwright test Automation_testing/e2e/iteration1",
+    "test:iteration2": "playwright test Automation_testing/e2e/iteration2",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
-    "test:install-browsers": "playwright install --with-deps"
+    "test:install-browsers": "playwright install --with-deps",
+    "test:unit": "npm run test:unit --prefix Frontend"
   },
   "repository": {
     "type": "git",
