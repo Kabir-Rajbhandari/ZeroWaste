@@ -5,7 +5,12 @@ import { foodApi } from "../../services/api";
 
 const MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1";
 const PAGE_SIZE = 5;
-const MAX_INGREDIENTS_TO_QUERY = 6; // keep it light — one request per ingredient
+// Keep this reasonably light (still just a few parallel requests), but not
+// so small that a real/shared account's existing inventory pushes newly
+// added, nearer-expiry ingredients out of the query set entirely — e.g. a
+// test or demo account can easily accumulate more than 6 near-expiry items
+// over time, which would otherwise silently starve suggestions.
+const MAX_INGREDIENTS_TO_QUERY = 12;
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop";
 
@@ -28,13 +33,37 @@ async function fetchMealsForIngredient(ingredient) {
     return Array.isArray(data.meals) ? data.meals : [];
   };
 
-  let meals = await tryFetch(ingredient);
-  if (meals.length === 0) {
-    const singular = singularize(ingredient);
-    if (singular.toLowerCase() !== ingredient.toLowerCase()) {
-      meals = await tryFetch(singular);
+  // TheMealDB's ingredient filter only recognises its own canonical
+  // ingredient names (e.g. "Chicken", "Chicken breast"). A user's food
+  // inventory name is often more specific/free-form (e.g. "Chicken QA
+  // 1723123123" or "Leftover Beef Stew"), so build a small, de-duplicated
+  // list of terms to try — the full name and its singular form first,
+  // then falling back to just the first word (where the actual
+  // ingredient keyword usually lives) and its singular form.
+  const candidateTerms = [];
+  const addCandidate = (term) => {
+    const trimmed = (term || "").trim();
+    if (
+      trimmed &&
+      !candidateTerms.some((t) => t.toLowerCase() === trimmed.toLowerCase())
+    ) {
+      candidateTerms.push(trimmed);
     }
+  };
+
+  addCandidate(ingredient);
+  addCandidate(singularize(ingredient));
+  const firstWord = ingredient.trim().split(/\s+/)[0];
+  addCandidate(firstWord);
+  addCandidate(singularize(firstWord));
+
+  let meals = [];
+  for (const term of candidateTerms) {
+    // eslint-disable-next-line no-await-in-loop
+    meals = await tryFetch(term);
+    if (meals.length > 0) break;
   }
+
   return meals.map((m) => ({
     id: m.idMeal,
     name: m.strMeal,
@@ -127,14 +156,25 @@ export default function SuggestedMeals({ onUseRecipe }) {
         // use — an expired item shouldn't drive a recipe suggestion. Items
         // expiring today still count (they're the most useful to suggest a
         // recipe for, before they're gone tomorrow).
-        const usable = (Array.isArray(items) ? items : []).filter((it) => {
-          if (!it.expiryDate) return true;
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const expiry = new Date(it.expiryDate);
-          expiry.setHours(0, 0, 0, 0);
-          return expiry >= today;
-        });
+        const usable = (Array.isArray(items) ? items : [])
+          .filter((it) => {
+            if (!it.expiryDate) return true;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const expiry = new Date(it.expiryDate);
+            expiry.setHours(0, 0, 0, 0);
+            return expiry >= today;
+          })
+          // UC6: recipe suggestions must be prioritised by nearest expiry —
+          // ingredients closest to going off are queried (and therefore
+          // surfaced) first. Items with no expiry date are treated as
+          // lowest priority and pushed to the end.
+          .sort((a, b) => {
+            if (!a.expiryDate && !b.expiryDate) return 0;
+            if (!a.expiryDate) return 1;
+            if (!b.expiryDate) return -1;
+            return new Date(a.expiryDate) - new Date(b.expiryDate);
+          });
         const names = Array.from(
           new Set(usable.map((it) => (it.name || "").trim()).filter(Boolean)),
         ).slice(0, MAX_INGREDIENTS_TO_QUERY);

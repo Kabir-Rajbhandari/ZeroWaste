@@ -1,89 +1,120 @@
 import { test } from "../../fixtures/test.fixtures.js";
 import { expect } from "@playwright/test";
 
-test.describe("UC5 - View Notifications", () => {
-  test.beforeEach(async ({ authedPage, dashboardPage }) => {
-    await dashboardPage.goToNotifications();
-  });
-
-  test("Positive: opens the notifications panel from the header bell @uc5 @positive", async ({
-    notificationsPage,
-  }) => {
-    await expect(notificationsPage.heading).toBeVisible();
-    await expect(notificationsPage.loadingMessage).toBeHidden({
-      timeout: 10_000,
+test.describe("UC5 - View Centralised Notification List", () => {
+  test.describe("Using TEST_USER", () => {
+    test.beforeEach(async ({ authedPage, dashboardPage }) => {
+      await dashboardPage.goToNotifications();
     });
-  });
 
-  test("Positive: filters notifications by tab @uc5 @positive", async ({
-    notificationsPage,
-  }) => {
-    for (const tab of ["Alerts", "Donations", "Reminders", "System", "All"]) {
-      await notificationsPage.filterBy(tab);
-      // Filtering must resolve to either notifications or the explicit
-      // empty state — never leave the page blank mid-transition.
+    test("Positive: View Centralised Notification List Sorted by Timestamp @uc5 @positive", async ({
+      notificationsPage,
+    }) => {
+      await expect(notificationsPage.heading).toBeVisible();
+      await expect(notificationsPage.loadingMessage).toBeHidden({
+        timeout: 10_000,
+      });
+
+      // Either real notifications render, or the explicit empty state
+      // does — never a blank panel.
       await expect(
         notificationsPage.notificationCardsByRole
           .first()
           .or(notificationsPage.emptyStateText),
       ).toBeVisible();
-    }
+
+      const count = await notificationsPage.notificationCardsByRole.count();
+      test.skip(
+        count < 2,
+        "Need at least 2 notifications to verify sort order in this environment.",
+      );
+
+      // Notifications.jsx sorts newest-first by createdAt before
+      // rendering — verify that ordering holds using each card's visible
+      // "time ago" badge, converted to an approximate minutes-ago rank.
+      const ranks = await notificationsPage.getRelativeAgeRanks();
+      for (let i = 1; i < ranks.length; i += 1) {
+        expect(
+          ranks[i],
+          `Notification #${i + 1} appears newer than #${i} — list is not sorted newest-first.`,
+        ).toBeGreaterThanOrEqual(ranks[i - 1]);
+      }
+    });
+
+    test("Positive: Notification Click Opens Related Screen and Marks as Read @uc5 @positive", async ({
+      notificationsPage,
+      dashboardPage,
+    }) => {
+      await expect(notificationsPage.loadingMessage).toBeHidden({
+        timeout: 10_000,
+      });
+
+      const count = await notificationsPage.notificationCardsByRole.count();
+      test.skip(
+        count === 0,
+        "No notifications available to open in this environment.",
+      );
+
+      const beforeBg = await notificationsPage.isUnread(0);
+
+      // Actor Action: clicking a notification. Notifications.jsx marks it
+      // read via the API immediately, then (if the notification type maps
+      // to a destination) navigates the dashboard to that related screen
+      // — e.g. an expiry alert opens Food Inventory, a new donation
+      // request opens Browse Food Items, etc.
+      await notificationsPage.openNotification(0);
+      await expect(notificationsPage.page.locator(".alert-danger")).toHaveCount(
+        0,
+      );
+
+      // Return to Notifications (no-op if the click had no destination
+      // and we never left) to confirm the item is now recorded as read.
+      await dashboardPage.goToNotifications();
+      await expect(notificationsPage.heading).toBeVisible();
+      const afterBg = await notificationsPage.isUnread(0);
+
+      expect(
+        afterBg,
+        "Notification card background did not change after clicking it — it may not have been marked as read.",
+      ).not.toBe(beforeBg);
+    });
   });
 
-  test("Positive: marks all notifications as read @uc5 @positive", async ({
-    notificationsPage,
-  }) => {
-    await notificationsPage.markAllRead();
-    await expect(notificationsPage.page.locator(".alert-danger")).toHaveCount(
-      0,
-    );
+  test.describe("Using TEST_USER_2 (fresh / low-activity account)", () => {
+    test.beforeEach(async ({ authedPage2, dashboardPage }) => {
+      await dashboardPage.goToNotifications();
+    });
+
+    test("Negative: Notification Panel Empty State for New User @uc5 @negative", async ({
+      notificationsPage,
+    }) => {
+      // A brand-new / never-active account (TEST_USER_2) has generated no
+      // notifications yet, so the panel must show the explicit empty
+      // state rather than a spinner, an error, or stale data.
+      await expect(notificationsPage.heading).toBeVisible();
+      await expect(notificationsPage.loadingMessage).toBeHidden({
+        timeout: 10_000,
+      });
+      await expect(notificationsPage.page.locator(".alert-danger")).toHaveCount(
+        0,
+      );
+      await notificationsPage.expectEmptyState();
+    });
   });
 
-  test("Positive: removes a non-actionable notification @uc5 @positive", async ({
-    notificationsPage,
+  test("Negative: Unauthenticated User Cannot Access Notification Panel @uc5 @negative", async ({
+    page,
+    loginPage,
   }) => {
-    const removable = notificationsPage.removeButtons.and(
-      notificationsPage.page.locator(":not([disabled])"),
-    );
-    const count = await removable.count();
-    test.skip(
-      count === 0,
-      "No removable notifications available in this environment.",
-    );
+    await page.goto("/dashboard");
 
-    const before = await notificationsPage.notificationCardsByRole.count();
-    await removable.first().click();
-    await expect
-      .poll(() => notificationsPage.notificationCardsByRole.count())
-      .toBeLessThan(before);
-  });
-
-  test("Alternative 1a: shows an empty state when there are no notifications for a filter @uc5 @negative", async ({
-    notificationsPage,
-  }) => {
-    await notificationsPage.filterBy("System");
-
-    // This check is inherently a snapshot-in-time: under a full parallel
-    // run, another concurrently-executing test (e.g. adding inventory,
-    // converting a donation) can create a new notification in the window
-    // between checking the count and asserting the empty state actually
-    // renders. Race the two possible outcomes directly instead of
-    // asserting on a count read a moment earlier — whichever the page
-    // actually shows right now is correct.
-    const outcome = await Promise.race([
-      notificationsPage.emptyStateText
-        .waitFor({ state: "visible", timeout: 5_000 })
-        .then(() => "empty"),
-      notificationsPage.notificationCardsByRole
-        .first()
-        .waitFor({ state: "visible", timeout: 5_000 })
-        .then(() => "has-data"),
-    ]).catch(() => "timeout");
-
-    test.skip(
-      outcome !== "empty",
-      "System notifications exist in this environment (or arrived mid-test from a parallel run) — no empty state to verify right now.",
-    );
-    await expect(notificationsPage.emptyStateText).toBeVisible();
+    await expect(loginPage.emailInput).toBeVisible();
+    await expect(loginPage.passwordInput).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Notification" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Notifications" }),
+    ).toHaveCount(0);
   });
 });

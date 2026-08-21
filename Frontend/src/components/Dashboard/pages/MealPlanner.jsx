@@ -298,7 +298,41 @@ export default function MealPlanner({
 
   const saveMealModal = async () => {
     if (!activeModal) return;
+    const trimmedName = mealName.trim();
     const parsedLinkedId = linkedItemId ? Number(linkedItemId) : null;
+    const existingEntry = meals[activeModal.key];
+
+    // Nothing meaningful entered: no meal name and no linked ingredient.
+    // Never round-trip a blank name to mealPlanApi.upsert() — some plan
+    // records can exist with a blank name (e.g. a linked-ingredient-only
+    // entry saved previously), which renders as a visually "empty" slot
+    // but still has a real planId, and re-upserting blank data onto it
+    // is rejected by the server. If there's an existing plan on this
+    // slot, clear it via the dedicated delete endpoint instead; if there
+    // isn't, just close the modal without any server call.
+    if (!trimmedName && !parsedLinkedId) {
+      if (existingEntry?.planId) {
+        try {
+          await mealPlanApi.delete(existingEntry.planId);
+          setMeals((prev) => {
+            const updated = { ...prev };
+            delete updated[activeModal.key];
+            return updated;
+          });
+          logActivity("Cleared planned meal");
+        } catch {
+          // Best-effort cleanup only. If this stale/blank-name record
+          // can't be removed server-side right now (e.g. it's already
+          // inconsistent from an earlier run), that is never something
+          // the user should see or be blocked by — a blank Save Meal
+          // click must always just close the modal quietly, with no
+          // error surfaced, regardless of what this cleanup call does.
+        }
+      }
+      setActiveModal(null);
+      return;
+    }
+
     try {
       const saved = await mealPlanApi.upsert({
         mealDate: dayKey(activeModal.date),

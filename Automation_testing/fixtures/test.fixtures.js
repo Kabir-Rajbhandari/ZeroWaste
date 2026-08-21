@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import { TEST_USER } from "./testConfig.js";
+import { TEST_USER, TEST_USER_2 } from "./testConfig.js";
 
 import { LandingPage } from "../pages/LandingPage.js";
 import { LoginPage } from "../pages/LoginPage.js";
@@ -30,6 +30,13 @@ export const test = base.extend({
   authedPage: async ({ page, loginPage }, use) => {
     await loginPage.goto();
     await loginPage.login(TEST_USER.email, TEST_USER.password);
+    await loginPage.expectLoggedIn();
+    await use(page);
+  },
+
+  authedPage2: async ({ page, loginPage }, use) => {
+    await loginPage.goto();
+    await loginPage.login(TEST_USER_2.email, TEST_USER_2.password);
     await loginPage.expectLoggedIn();
     await use(page);
   },

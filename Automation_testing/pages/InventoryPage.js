@@ -179,4 +179,18 @@ export class InventoryPage extends BasePage {
     ).toBeVisible({ timeout: 10_000 });
     await this.searchInput.fill("");
   }
+
+  async expectItemReserved(name) {
+    await this.searchInput.click();
+    await this.searchInput.fill(name);
+    await expect(
+      this.page.getByText(name, { exact: false }).first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      this.page.getByText("Reserved", { exact: true }),
+    ).toBeVisible();
+    await this.searchInput.fill("");
+  }
 }

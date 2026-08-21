@@ -16,7 +16,11 @@ export class BrowsePage extends BasePage {
       name: "Contact Donor",
     });
     this.backButton = page.getByRole("button", { name: "Back" });
-    this.emptyStateText = page.getByText("No donated items are");
+    // BrowseFoodItem.jsx renders "No matching food items found" (with a
+    // "Try adjusting your search query or clearing active filters" hint)
+    // when the active filters produce zero results — NOT "No donated
+    // items are...", which does not appear anywhere in this component.
+    this.emptyStateText = page.getByText("No matching food items found");
   }
 
   async filterByCategory(category) {

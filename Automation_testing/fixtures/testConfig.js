@@ -40,11 +40,6 @@ export function donationEligibleExpiryDate(daysFromNow = 3) {
   return date.toISOString().slice(0, 10);
 }
 
-/**
- * Returns a YYYY-MM-DD expiry date far enough out that it is NOT eligible
- * for donation yet — useful for regular "add/edit inventory item" tests
- * that shouldn't accidentally trigger donation-eligibility side effects.
- */
 export function farFutureExpiryDate(daysFromNow = 180) {
   const date = new Date();
   date.setDate(date.getDate() + daysFromNow);

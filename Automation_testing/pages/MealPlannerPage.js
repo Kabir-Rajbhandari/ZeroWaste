@@ -20,20 +20,35 @@ export class MealPlannerPage extends BasePage {
     this.prevButton = page.getByRole("button", { name: "Previous" });
     this.nextButton = page.getByRole("button", { name: "Next" });
 
-    // "Plan {meal}" modal — opened by clicking any empty meal-slot cell.
+    // "Plan {meal}" modal — opened by clicking any meal-slot cell (empty
+    // or already-planned; the same modal is reused for editing).
     this.planModal = page.getByRole("dialog");
     this.mealNameInput = page.getByPlaceholder(
       "e.g. Scrambled Eggs with Toast",
     );
-    this.linkedIngredientSelect = page.getByLabel("Link Inventory Ingredient");
+    // "Link Inventory Ingredient" is a plain <label> that is NOT
+    // htmlFor-associated with (or wrapped around) its <select> in
+    // MealPlanner.jsx, so getByLabel() cannot find it — it is the only
+    // <select> rendered inside the modal, so scope to that instead.
+    this.linkedIngredientSelect = this.planModal.locator("select");
     this.saveMealButton = page.getByRole("button", { name: "Save Meal" });
     this.cancelModalButton = this.planModal.getByRole("button", {
       name: "Cancel",
     });
-    this.closeModalButton = page.getByRole("button", { name: "Close" });
+    this.closeModalButton = this.planModal.getByRole("button", {
+      name: "Close",
+    });
 
-    // Any empty (unplanned) grid cell — clicking one opens the plan modal.
-    this.emptyMealCell = page.locator("td.meal-cell-hover").first();
+    // Every grid cell (empty or already-planned) shares the
+    // "meal-cell-hover" class, so a bare `.first()` can land on an
+    // already-planned cell if seed data exists. Filter out cells that
+    // contain a rendered ".meal-card-item" (MealPlanner.jsx only renders
+    // that when the slot has a saved meal) to reliably find a genuinely
+    // empty slot.
+    this.mealCells = page.locator("td.meal-cell-hover");
+    this.emptyMealCell = this.mealCells
+      .filter({ hasNot: page.locator(".meal-card-item") })
+      .first();
   }
 
   async switchToWeekView() {
