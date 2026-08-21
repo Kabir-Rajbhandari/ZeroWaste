@@ -29,19 +29,7 @@ import com.zerowaste.zerowaste.exception.ApiException;
 import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.UserRepository;
 
-/**
- * Implements UC1 "Register Users and Privacy Settings" exactly as specified:
- *
- * 1. User submits Full name / Email / Password / Household size (optional) →
- * validated and saved. 2. User opts in to 2FA as part of the privacy/security
- * step → the system emails a welcome message containing BOTH the confirmation
- * link and a 6-digit verification code. 3. User clicks the link, then enters
- * the 6-digit code and sets a NEW password on the confirmation screen → the
- * system activates the account.
- *
- * Alternative flows: duplicate email at step 3a, invalid/expired code at line 6
- * (prompts the user to request a fresh code without needing a new link).
- */
+
 @Service
 public class AuthService {
 
@@ -67,7 +55,7 @@ public class AuthService {
         this.emailVerificationService = emailVerificationService;
     }
 
-    // ── Step 1: register (save the record only — no email yet) ─────────────
+    // ── Step 1: register 
     public RegisterResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail().toLowerCase())) {
             // Alt-flow 3a: email already registered.
@@ -81,11 +69,6 @@ public class AuthService {
                 .role("USER")
                 .householdSize(normalizeHouseholdSize(request.getHouseholdSize()))
                 .emailVerified(false)
-                // Deliberately no verificationToken/otpCode yet, and no email
-                // sent yet — those only get generated once the user finishes
-                // the Privacy & Security step below. This matches the spec's
-                // ordering: Register → Privacy & Security Configuration →
-                // Verification email → Verify & activate.
                 .donationPublic(true)
                 .twoFactorEnabled(false)
                 .build();
@@ -97,16 +80,7 @@ public class AuthService {
                 "Account created! Next, configure your privacy and security settings.");
     }
 
-    // ── Step 2: privacy & security configuration → sends the email ─────────
-    /**
-     * "After successful registration... the user is taken to privacy/security
-     * configuration... User enables 2FA → System saves the security preference"
-     * followed immediately by "SavePlate automatically sends an email
-     * containing: welcome message, confirmation link, 6-digit verification
-     * code." Identified by email since the user has no JWT yet (account isn't
-     * verified/active) — same pre-activation lookup pattern already used by
-     * resendVerificationEmail() below.
-     */
+    // ── Step 2: privacy & security configuration - sends the email 
     public MessageResponse configureRegistrationSecurity(RegistrationSecurityRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
                 .orElseThrow(() -> new ApiException("No pending registration found for this email.", HttpStatus.NOT_FOUND));
@@ -126,10 +100,6 @@ public class AuthService {
 
         user.setVerificationToken(verificationToken);
         user.setVerificationTokenExpiresAt(expiresAt);
-        // Reuse the existing otpCode/otpExpiresAt columns (normally used by
-        // TwoFactorService for the Settings-page 2FA flow) to hold the
-        // registration verification code — a brand-new, unverified account
-        // can't reach those other flows yet, so there's no collision.
         user.setOtpCode(verificationCode);
         user.setOtpExpiresAt(expiresAt);
 
@@ -149,8 +119,6 @@ public class AuthService {
             throw new ApiException("Invalid email or password.", HttpStatus.UNAUTHORIZED);
         }
 
-        // First-login gate: account must be verified (code + new password set)
-        // before any token is issued. Once true this never needs checking again.
         if (!Boolean.TRUE.equals(user.getEmailVerified())) {
             throw new ApiException(
                     "Please finish verifying your email address before logging in. Check your inbox for the verification link and code we sent when you signed up.",
@@ -169,12 +137,6 @@ public class AuthService {
         return new LoginResponse(jwtService.generateToken(user), UserResponse.from(user), false, null);
     }
 
-    /**
-     * Re-sends BOTH a fresh link and a fresh code for an unverified account.
-     * Used by the "Resend verification email" action on the sign-in page, which
-     * only appears once login has told the user their account isn't verified
-     * yet.
-     */
     public MessageResponse resendVerificationEmail(ResendVerificationRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
                 .orElseThrow(() -> new ApiException("No account found with this email address.", HttpStatus.NOT_FOUND));
@@ -199,12 +161,7 @@ public class AuthService {
         return new MessageResponse("A new verification email has been sent! Please check your inbox.");
     }
 
-    // ── Step 3: read-only check when the user first lands on the link ──────
-    /**
-     * Called the moment the confirmation page loads (before anything is
-     * mutated) so the frontend knows whether to show the code+password form, an
-     * "already verified" screen, or an expired/invalid-link screen.
-     */
+    // ── Step 3: read-only check when the user first lands on the link
     public VerificationTokenStatusResponse checkVerificationToken(String token) {
         if (token == null || token.isBlank()) {
             return new VerificationTokenStatusResponse(false, false, "Invalid verification link.");
@@ -227,12 +184,8 @@ public class AuthService {
                 .orElseGet(() -> new VerificationTokenStatusResponse(false, false, "Invalid verification link."));
     }
 
-    // ── Step 3 (continued): verification code → account activation ────────
-    /**
-     * "Upon clicking the link, the user enters the verification code" → "System
-     * activate the account". Password was already set at registration, so it
-     * isn't collected or changed here.
-     */
+    // ── Step 3 (continued): verification code - account activation 
+
     public MessageResponse completeRegistration(CompleteVerificationRequest request) {
         User user = userRepository.findByVerificationToken(request.getToken().trim())
                 .orElseThrow(() -> new ApiException("Invalid verification link.", HttpStatus.BAD_REQUEST));
@@ -266,23 +219,15 @@ public class AuthService {
                     HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
-        // ✅ Correct code + link still valid — activate the account. Password
-        // was already set at registration, so it isn't touched here.
+        
         user.setEmailVerified(true);
         user.setOtpCode(null);
         user.setOtpExpiresAt(null);
-        // NOTE: intentionally NOT clearing verificationToken — see
-        // checkVerificationToken()/this method's "already used" branch above,
-        // which relies on the token still being resolvable after activation.
         userRepository.save(user);
 
         return new MessageResponse("Your account has been verified and activated! You can now log in.");
     }
 
-    /**
-     * Alt-flow, Line 6: user's code expired or they never received it — send a
-     * fresh code without asking them to re-register or click a new link.
-     */
     public MessageResponse resendCode(ResendCodeRequest request) {
         User user = userRepository.findByVerificationToken(request.getToken().trim())
                 .orElseThrow(() -> new ApiException("Invalid verification link.", HttpStatus.BAD_REQUEST));
@@ -294,8 +239,7 @@ public class AuthService {
         String verificationCode = generateSixDigitCode();
         Instant expiresAt = Instant.now().plus(VERIFICATION_TOKEN_EXPIRY_HOURS, ChronoUnit.HOURS);
 
-        // Refresh the link's expiry too, so a stale link doesn't undercut the
-        // brand-new code sent alongside it.
+    
         user.setVerificationTokenExpiresAt(expiresAt);
         user.setOtpCode(verificationCode);
         user.setOtpExpiresAt(expiresAt);
@@ -307,12 +251,7 @@ public class AuthService {
         return new MessageResponse("A new verification code has been sent to your email.");
     }
 
-    // ── Forgot Password: request a reset code ──────────────────────────────
-    /**
-     * "If user forgot their password then the system send a verification
-     * code..." Existing accounts only — reveals whether an account exists,
-     * matching the same pattern already used by resendVerificationEmail().
-     */
+    // ── Forgot Password: request a reset code
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
                 .orElseThrow(() -> new ApiException("No account found with this email address.", HttpStatus.NOT_FOUND));
@@ -329,11 +268,7 @@ public class AuthService {
         return new MessageResponse("A verification code has been sent to your email.");
     }
 
-    // ── Forgot Password: submit code + new password ────────────────────────
-    /**
-     * "...and then user can update their password." Validates the code, then
-     * replaces the password.
-     */
+    // ── Forgot Password: submit code + new password 
     public MessageResponse resetPassword(ResetPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
                 .orElseThrow(() -> new ApiException("No account found with this email address.", HttpStatus.NOT_FOUND));
@@ -390,7 +325,7 @@ public class AuthService {
     }
 
     private String generateSixDigitCode() {
-        int code = 100_000 + RANDOM.nextInt(900_000); // always exactly 6 digits
+        int code = 100_000 + RANDOM.nextInt(900_000);
         return String.valueOf(code);
     }
 }

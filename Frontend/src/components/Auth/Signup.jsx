@@ -60,8 +60,6 @@ export default function Signup({ onNavigate }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [errMsg, setErrMsg] = useState("");
 
-  // "form" (registration) → "security" (Privacy & Security Configuration,
-  // step 2) → "checkEmail" (verification email just sent, step 3 pending).
   const [stage, setStage] = useState("form");
   const [registeredEmail, setRegisteredEmail] = useState("");
 
@@ -93,9 +91,6 @@ export default function Signup({ onNavigate }) {
 
     let isMounted = true;
 
-    // Read-only precheck — does NOT activate the account. Just tells us
-    // which screen to show: the code+password form, "already verified", or
-    // an expired/invalid-link message.
     authApi
       .checkVerificationToken(verifyToken)
       .then((data) => {
@@ -171,10 +166,6 @@ export default function Signup({ onNavigate }) {
           form.householdSize === "" ? null : Number(form.householdSize),
       });
 
-      // UC1: registration succeeding moves the user to the Privacy &
-      // Security Configuration step next — NOT straight to login, and NOT
-      // straight to "check your email" (the email isn't sent until that
-      // step is submitted).
       setRegisteredEmail(form.email.trim());
       setForm({ ...INITIAL_FORM_STATE });
       setStatus("idle");
@@ -185,7 +176,7 @@ export default function Signup({ onNavigate }) {
     }
   };
 
-  // ── Step 2: Privacy & Security Configuration ────────────────────────────
+  // ── Step 2: Privacy & Security Configuration
   const handleSecurityChange = (e) => {
     const { name, checked } = e.target;
     setSecurityForm((prev) => ({ ...prev, [name]: checked }));

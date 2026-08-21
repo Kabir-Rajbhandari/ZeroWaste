@@ -15,14 +15,6 @@ import com.zerowaste.zerowaste.model.User;
 import com.zerowaste.zerowaste.repository.NotificationRepository;
 import com.zerowaste.zerowaste.repository.UserRepository;
 
-/**
- * Handles the 2FA enable/disable flow:
- *
- * 1. User toggles 2FA ON → initiate2FA() → generates OTP, emails it, marks
- * pendingTwoFactor=true 2. User enters the OTP → verify2FA() → validates OTP,
- * sets twoFactorEnabled=true, clears OTP 3. User toggles 2FA OFF → disable2FA()
- * → immediately sets twoFactorEnabled=false (no OTP needed)
- */
 @Service
 public class TwoFactorService {
 
@@ -43,12 +35,7 @@ public class TwoFactorService {
         this.otpEmailService = otpEmailService;
     }
 
-    // ── Step 1: User toggles 2FA on → send OTP email ───────────────────────
-    /**
-     * Generates a 6-digit OTP, persists it on the user, and sends the
-     * verification email. Returns immediately; the account is NOT yet
-     * 2FA-enabled.
-     */
+    // ── Step 1: User toggles 2FA on - send OTP email 
     public void initiate2FA(Long userId) {
         User user = findUser(userId);
 
@@ -66,12 +53,7 @@ public class TwoFactorService {
         otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
-    // ── Step 2: User submits the code → activate 2FA ───────────────────────
-    /**
-     * Validates the supplied OTP. On success, enables 2FA and clears the OTP
-     * fields. On failure, throws ApiException (caller should NOT clear the OTP
-     * so the user can retry until it expires).
-     */
+    // ── Step 2: User submits the code - activate 2FA 
     public UserResponse verify2FA(Long userId, String submittedCode) {
         User user = findUser(userId);
 
@@ -96,7 +78,6 @@ public class TwoFactorService {
             throw new ApiException("Invalid verification code. Please try again.", HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
-        // ✅ Correct OTP — activate 2FA
         user.setTwoFactorEnabled(true);
         user.setPendingTwoFactor(false);
         clearOtp(user);
@@ -110,12 +91,7 @@ public class TwoFactorService {
         return UserResponse.from(saved);
     }
 
-    // ── Login: 2FA-enabled user signs in → send OTP email ──────────────────
-    /**
-     * Generates a fresh OTP for a user who is already fully 2FA-enabled and is
-     * attempting to log in. Does not touch pendingTwoFactor/twoFactorEnabled,
-     * since those belong to the enable-2FA flow, not the login flow.
-     */
+    // ── Login: 2FA-enabled user signs in - send OTP email
     public void initiateLogin2FA(User user) {
         String otp = generateOtp();
         user.setOtpCode(otp);
@@ -125,12 +101,7 @@ public class TwoFactorService {
         otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
-    // ── Login: User submits the login OTP → completes authentication ───────
-    /**
-     * Validates the OTP submitted during login for a 2FA-enabled user. On
-     * success, clears the OTP and returns the user so the caller can issue a
-     * JWT. On failure, throws ApiException.
-     */
+    // ── Login: User submits the login OTP - completes authentication 
     public User verifyLogin2FA(String email, String submittedCode) {
         User user = userRepository.findByEmail(email.toLowerCase().trim())
                 .orElseThrow(() -> new ApiException("Invalid email or verification code.", HttpStatus.UNAUTHORIZED));
@@ -159,11 +130,7 @@ public class TwoFactorService {
         return userRepository.save(user);
     }
 
-    // ── Resend: User requests a fresh OTP ───────────────────────────────────
-    /**
-     * Re-generates and re-sends the OTP for a user who has a pending 2FA
-     * initiation. Resets the expiry window.
-     */
+    // ── Resend: User requests a fresh OTP
     public void resendOtp(Long userId) {
         User user = findUser(userId);
 
@@ -179,10 +146,7 @@ public class TwoFactorService {
         otpEmailService.sendOtpEmail(user.getEmail(), user.getFullName(), otp, otpExpiryMinutes);
     }
 
-    // ── Disable: User toggles 2FA off (no OTP required) ────────────────────
-    /**
-     * Immediately disables 2FA. Also cancels any in-flight enable attempt.
-     */
+    // ── Disable: User toggles 2FA off
     public UserResponse disable2FA(Long userId) {
         User user = findUser(userId);
         user.setTwoFactorEnabled(false);
@@ -198,11 +162,7 @@ public class TwoFactorService {
         return UserResponse.from(saved);
     }
 
-    // ── Cancel: User dismisses the OTP modal without verifying ─────────────
-    /**
-     * Cancels a pending 2FA enable attempt (user closed the modal). Resets
-     * pendingTwoFactor and clears the OTP without enabling 2FA.
-     */
+    // ── Cancel: User dismisses the OTP modal without verifying 
     public UserResponse cancelPending2FA(Long userId) {
         User user = findUser(userId);
         user.setPendingTwoFactor(false);
@@ -211,7 +171,7 @@ public class TwoFactorService {
         return UserResponse.from(saved);
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    // ── Helpers 
     private String generateOtp() {
         int code = 100_000 + RANDOM.nextInt(900_000);   // always exactly 6 digits
         return String.valueOf(code);
